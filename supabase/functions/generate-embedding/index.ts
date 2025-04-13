@@ -17,6 +17,7 @@ interface Profile {
   interests: string[] | null;
   linkedin_url: string | null;
   event_id: string;
+  resume_text?: string; // Optional field for extracted resume text
 }
 
 interface RequestBody {
@@ -139,24 +140,29 @@ async function sendUserDataToWebhook(userId: string, eventId: string, profileDat
   try {
     console.log(`Sending user data to webhook for user ${userId} in event ${eventId}`)
     
-    // Create a modified profile data object with resume text instead of URL
+    // Create a modified profile data object with resume text
     const enhancedProfileData = { ...profileData }
     
     // Extract text from resume if URL is available
     if (profileData.resume_url) {
       console.log(`Extracting text from resume: ${profileData.resume_url}`)
       const resumeText = await extractTextFromPdf(profileData.resume_url)
-      // Add the extracted text to the profile data
+      // Add the extracted text directly to the profile data object
       enhancedProfileData.resume_text = resumeText
     }
     
-    // Prepare the payload
+    // Prepare the payload with the new structure
     const payload = {
       userId,
       eventId,
       profileData: enhancedProfileData,
       pineconeIndex,
-      sessionId: "233076" // Adding the test ID as requested
+      sessionId: "233076", // Adding the test ID as requested
+      metadata: {
+        userId: userId, // Add userId to metadata as requested
+        eventId: eventId,
+        timestamp: new Date().toISOString()
+      }
     }
     
     // Send POST request to webhook
@@ -254,4 +260,3 @@ Deno.serve(async (req) => {
     )
   }
 })
-
