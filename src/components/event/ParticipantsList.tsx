@@ -2,6 +2,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import ParticipantCard from './ParticipantCard';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 type Profile = {
   id: string;
@@ -21,19 +22,24 @@ interface ParticipantsListProps {
 }
 
 const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles }) => {
+  const { userId } = useCurrentUser();
+  
+  // Filter out the current user from the participants list
+  const filteredProfiles = profiles.filter(profile => profile.id !== userId);
+  
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Event Participants ({profiles.length})</h2>
+      <h2 className="text-xl font-semibold">Event Participants ({filteredProfiles.length})</h2>
       
-      {profiles.length === 0 ? (
+      {filteredProfiles.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-muted-foreground">No participants have registered for this event yet.</p>
+            <p className="text-muted-foreground">No other participants have registered for this event yet.</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {profiles.map((profile) => (
+          {filteredProfiles.map((profile) => (
             <ParticipantCard key={profile.id} profile={profile} />
           ))}
         </div>

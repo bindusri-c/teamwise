@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Linkedin, User, Percent } from 'lucide-react';
+import { Linkedin, User, Percent, BadgePercent } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 type ParticipantCardProps = {
@@ -58,8 +58,8 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
           </div>
           
           {profile.similarity_score !== undefined && (
-            <Badge className={getSimilarityBadgeStyle(profile.similarity_score)}>
-              <Percent className="h-3 w-3 mr-1" />
+            <Badge className={`${getSimilarityBadgeStyle(profile.similarity_score)} flex items-center`}>
+              <BadgePercent className="h-3 w-3 mr-1" />
               {formatSimilarityPercentage(profile.similarity_score)}
             </Badge>
           )}

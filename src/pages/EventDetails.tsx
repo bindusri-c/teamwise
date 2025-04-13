@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -70,7 +69,6 @@ const EventDetails = () => {
       if (userId && profilesData.length > 0) {
         await fetchSimilarityScores(profilesData);
       } else {
-        // Filter out current user and set profiles
         const filteredProfiles = profilesData.filter(profile => profile.id !== userId) as ProfileWithSimilarity[];
         setProfiles(filteredProfiles);
       }
@@ -92,6 +90,8 @@ const EventDetails = () => {
     
     setLoadingSimilarities(true);
     try {
+      console.log('Fetching similarity scores for profiles:', profilesData);
+      
       const { data: similarityData, error: similarityError } = await supabase
         .from('profile_similarities')
         .select('profile_id_1, profile_id_2, similarity_score')
@@ -99,6 +99,8 @@ const EventDetails = () => {
         .or(`profile_id_1.eq.${userId},profile_id_2.eq.${userId}`);
       
       if (similarityError) throw similarityError;
+      
+      console.log('Similarity data from database:', similarityData);
       
       const profilesWithSimilarity = profilesData.map(profile => {
         if (profile.id === userId) {
@@ -117,9 +119,9 @@ const EventDetails = () => {
         };
       });
       
-      // Filter out the current user from the list of participants
-      const filteredProfiles = profilesWithSimilarity.filter(profile => profile.id !== userId);
-      setProfiles(filteredProfiles);
+      console.log('Profiles with similarity scores:', profilesWithSimilarity);
+      
+      setProfiles(profilesWithSimilarity);
     } catch (error) {
       console.error('Error fetching similarity scores:', error);
     } finally {
