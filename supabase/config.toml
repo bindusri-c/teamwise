@@ -3,3 +3,6 @@ project_id = "tagpzwzxruxxxoldiwtt"
 
 [functions."hello-world"]
 verify_jwt = true
+
+[functions."generate-event-code"]
+verify_jwt = true
