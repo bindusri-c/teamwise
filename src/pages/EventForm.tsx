@@ -115,11 +115,15 @@ const EventForm = () => {
         }
         
         if (profileData) {
+          let genderValue: '' | 'male' | 'female' = '';
+          if (profileData.gender === 'male') genderValue = 'male';
+          if (profileData.gender === 'female') genderValue = 'female';
+          
           setFormData(prev => ({
             ...prev,
             name: profileData.name || prev.name,
             age: profileData.age ? profileData.age.toString() : prev.age,
-            gender: profileData.gender || prev.gender,
+            gender: genderValue,
             hobbies: profileData.hobbies || prev.hobbies,
             linkedinUrl: profileData.linkedin_url || prev.linkedinUrl,
             skills: profileData.skills || prev.skills,
