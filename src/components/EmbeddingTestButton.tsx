@@ -29,16 +29,17 @@ const EmbeddingTestButton = () => {
         .from('events')
         .select('id')
         .eq('name', 'datathon')
-        .maybeSingle();
+        .limit(1); // Get only the first event with this name
       
       if (eventError) {
         throw new Error(`Error finding event: ${eventError.message}`);
       }
       
-      let eventId = eventData?.id;
-      
-      // If event doesn't exist, create it
-      if (!eventId) {
+      // If no events found or no data returned
+      if (!eventData || eventData.length === 0) {
+        console.log('No datathon event found, creating one');
+        
+        // Create a new event if none exists
         const { data: newEvent, error: createError } = await supabase
           .from('events')
           .insert({
@@ -53,7 +54,7 @@ const EmbeddingTestButton = () => {
           throw new Error(`Error creating event: ${createError.message}`);
         }
         
-        eventId = newEvent.id;
+        var eventId = newEvent.id;
         
         // Create Pinecone index for the new event
         try {
@@ -84,6 +85,10 @@ const EmbeddingTestButton = () => {
           title: "Event Created",
           description: "Created 'datathon' event for testing",
         });
+      } else {
+        // Use the first event found
+        var eventId = eventData[0].id;
+        console.log(`Using existing datathon event with ID: ${eventId}`);
       }
       
       // Check if user has a profile for this event
