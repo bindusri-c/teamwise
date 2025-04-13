@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import CreateEventForm from '@/components/CreateEventForm';
 import JoinEventForm from '@/components/JoinEventForm';
 import EventsList from '@/components/EventsList';
+import EmbeddingTestButton from '@/components/EmbeddingTestButton';
 import { CalendarPlus, UserPlus, User, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -25,13 +26,16 @@ const Dashboard = () => {
       <main className="flex-1 container py-8 px-4 md:px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <h1 className="text-3xl font-bold">Welcome, {displayName}</h1>
-          <Link to="/profile">
-            <Button variant="outline" className="flex items-center gap-2">
-              <User size={16} />
-              Manage Profile
-              <ExternalLink size={14} />
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <EmbeddingTestButton />
+            <Link to="/profile">
+              <Button variant="outline" className="flex items-center gap-2">
+                <User size={16} />
+                Manage Profile
+                <ExternalLink size={14} />
+              </Button>
+            </Link>
+          </div>
         </div>
         
         <div className="grid gap-6 md:grid-cols-3 mb-8">
