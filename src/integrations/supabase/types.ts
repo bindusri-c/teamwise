@@ -16,6 +16,8 @@ export type Database = {
           created_by: string
           id: string
           name: string
+          pinecone_index: string | null
+          updated_at: string | null
         }
         Insert: {
           code: string
@@ -23,6 +25,8 @@ export type Database = {
           created_by: string
           id?: string
           name: string
+          pinecone_index?: string | null
+          updated_at?: string | null
         }
         Update: {
           code?: string
@@ -30,6 +34,8 @@ export type Database = {
           created_by?: string
           id?: string
           name?: string
+          pinecone_index?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
