@@ -29,23 +29,23 @@ const JoinEventForm = () => {
     setIsLoading(true);
 
     try {
-      // First, get the event by code
+      // First, get the event by code - FIXED: removed the .single() call that was causing the 406 error
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('*')
-        .eq('code', eventCode)
-        .single();
+        .eq('code', eventCode);
 
       if (eventError) {
-        if (eventError.code === 'PGRST116') {
-          throw new Error('Event not found. Please check the code and try again.');
-        }
         throw eventError;
       }
 
-      if (!eventData) {
+      // Check if any events were found
+      if (!eventData || eventData.length === 0) {
         throw new Error('Event not found. Please check the code and try again.');
       }
+
+      // Use the first event that matches
+      const event = eventData[0];
 
       const currentUser = (await supabase.auth.getUser()).data.user;
       
@@ -57,7 +57,7 @@ const JoinEventForm = () => {
       const { error: participantError } = await supabase
         .from('participants')
         .insert({
-          event_id: eventData.id,
+          event_id: event.id,
           user_id: currentUser.id
         });
 
@@ -66,10 +66,10 @@ const JoinEventForm = () => {
         if (participantError.code === '23505') { // Unique violation
           toast({
             title: "Info",
-            description: `You have already joined the event "${eventData.name}"`,
+            description: `You have already joined the event "${event.name}"`,
           });
           // Still navigate to the event form page
-          navigate(`/event/${eventData.id}`);
+          navigate(`/event/${event.id}`);
           return;
         }
         throw participantError;
@@ -77,12 +77,12 @@ const JoinEventForm = () => {
 
       toast({
         title: "Success",
-        description: `You have successfully joined the event "${eventData.name}"`,
+        description: `You have successfully joined the event "${event.name}"`,
       });
 
       // Reset form and navigate to the event form page
       setEventCode('');
-      navigate(`/event/${eventData.id}`);
+      navigate(`/event/${event.id}`);
     } catch (error: any) {
       console.error('Error joining event:', error);
       toast({
