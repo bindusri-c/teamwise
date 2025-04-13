@@ -1,7 +1,7 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { LogOut, BrainCircuit, User } from 'lucide-react';
+import { LogOut, BrainCircuit } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,8 +9,8 @@ const DashboardHeader = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
@@ -26,11 +26,11 @@ const DashboardHeader = () => {
           <div className="flex items-center space-x-2">
             <Avatar className="h-8 w-8 border border-rag-primary/20">
               <AvatarFallback className="bg-rag-secondary/10 text-rag-primary">
-                {user?.name?.charAt(0) || 'U'}
+                {user?.email?.charAt(0).toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
             <span className="text-sm font-medium hidden md:inline-block">
-              {user?.name || user?.email}
+              {user?.email || 'User'}
             </span>
           </div>
           
