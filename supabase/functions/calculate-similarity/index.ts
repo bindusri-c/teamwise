@@ -33,6 +33,10 @@ export const corsResponse = () => {
 // Calculate cosine similarity between two embedding vectors
 function calculateCosineSimilarity(vectorA: number[], vectorB: number[]): number {
   if (!vectorA || !vectorB || vectorA.length !== vectorB.length) {
+    console.error('Invalid vectors for similarity calculation', {
+      vectorALength: vectorA?.length || 0,
+      vectorBLength: vectorB?.length || 0
+    })
     return 0;
   }
 
@@ -47,10 +51,20 @@ function calculateCosineSimilarity(vectorA: number[], vectorB: number[]): number
   }
 
   if (normA === 0 || normB === 0) {
+    console.warn('Zero vector detected in similarity calculation')
     return 0;
   }
 
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  const similarity = dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  
+  // Verify the similarity score is within expected range
+  if (similarity < -1 || similarity > 1) {
+    console.error(`Invalid similarity score calculated: ${similarity}`)
+    return 0;
+  }
+  
+  // Convert negative similarities to 0 (they indicate opposite vectors)
+  return Math.max(0, similarity);
 }
 
 // Main handler function
@@ -146,6 +160,7 @@ Deno.serve(async (req) => {
         })
         
         scoresCalculated++
+        console.log(`Calculated similarity between ${profileId1} and ${profileId2}: ${similarity}`)
       }
     } else {
       // Calculate similarities between all profile pairs
@@ -167,6 +182,7 @@ Deno.serve(async (req) => {
           })
           
           scoresCalculated++
+          console.log(`Calculated similarity between ${profiles[i].id} and ${profiles[j].id}: ${similarity}`)
         }
       }
     }

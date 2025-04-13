@@ -47,22 +47,55 @@ export const corsResponse = () => {
   })
 }
 
-// Function to create a text representation of the profile
+// Enhanced function to create a text representation of the profile
 function createEmbeddingText(profile: Profile): string {
-  const parts = [
-    `Name: ${profile.name || ''}`,
-    `Email: ${profile.email || ''}`,
-    profile.age ? `Age: ${profile.age}` : '',
-    profile.gender ? `Gender: ${profile.gender}` : '',
-    profile.hobbies ? `Hobbies: ${profile.hobbies}` : '',
-    profile.about_you ? `About: ${profile.about_you}` : '',
-    profile.looking_for ? `Looking for: ${profile.looking_for}` : '',
-    profile.skills?.length ? `Skills: ${profile.skills.join(', ')}` : '',
-    profile.interests?.length ? `Interests: ${profile.interests.join(', ')}` : '',
-    profile.linkedin_url ? `LinkedIn: ${profile.linkedin_url}` : '',
-  ]
-
-  return parts.filter(Boolean).join(' ').trim()
+  // Build a structured profile summary with weighted importance
+  // Start with most important identity information
+  let profileText = '';
+  
+  // IDENTITY - Primary identifiers
+  if (profile.name) profileText += `Name: ${profile.name}. `;
+  if (profile.email) profileText += `Email: ${profile.email}. `;
+  
+  // PROFESSIONAL SUMMARY - Heavily weight the "about_you" section as it typically contains the most detailed self-description
+  if (profile.about_you) {
+    profileText += `About: ${profile.about_you.replace(/\n/g, ' ')}. `;
+  }
+  
+  // GOALS - What they're looking for (heavily weighted)
+  if (profile.looking_for) {
+    profileText += `Looking for: ${profile.looking_for.replace(/\n/g, ' ')}. `;
+  }
+  
+  // SKILLS - Professional capabilities (heavily weighted)
+  if (profile.skills?.length) {
+    // Give extra importance to skills by repeating them and structuring them clearly
+    profileText += `Skills: ${profile.skills.join(', ')}. `;
+    // Add each skill individually for more emphasis
+    profile.skills.forEach(skill => {
+      profileText += `Has skill in: ${skill}. `;
+    });
+  }
+  
+  // INTERESTS - Personal preferences (moderately weighted)
+  if (profile.interests?.length) {
+    profileText += `Interests: ${profile.interests.join(', ')}. `;
+    // Add each interest individually for more emphasis
+    profile.interests.forEach(interest => {
+      profileText += `Interested in: ${interest}. `;
+    });
+  }
+  
+  // PERSONAL DETAILS - Less important but still relevant
+  if (profile.hobbies) profileText += `Hobbies: ${profile.hobbies}. `;
+  if (profile.age) profileText += `Age: ${profile.age}. `;
+  if (profile.gender) profileText += `Gender: ${profile.gender}. `;
+  
+  // PROFESSIONAL LINKS - Less critical but indicates professional presence
+  if (profile.linkedin_url) profileText += `LinkedIn: ${profile.linkedin_url}. `;
+  
+  console.log(`Created profile text with length: ${profileText.length} characters`);
+  return profileText.trim();
 }
 
 // Function to generate embedding vector using Gemini API
