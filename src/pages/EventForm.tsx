@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
-import { Loader2, Upload, ArrowLeft, AlertCircle, Info } from 'lucide-react';
+import { Loader2, Upload, ArrowLeft, AlertCircle, Info, UserX } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -51,16 +51,13 @@ const EventForm = () => {
     name?: string;
     email?: string;
     resume?: string;
-    image?: string;
   }>({});
   
   const [resumeFileName, setResumeFileName] = useState<string>('');
-  const [imageFileName, setImageFileName] = useState<string>('');
   const [additionalFileNames, setAdditionalFileNames] = useState<string[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resumeInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
     if (eventId) {
@@ -244,39 +241,6 @@ const EventForm = () => {
     e.target.value = '';
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-    if (!validTypes.includes(file.type)) {
-      toast({
-        title: "Invalid file type",
-        description: "Only JPEG, PNG and GIF files are allowed for images",
-        variant: "destructive"
-      });
-      e.target.value = '';
-      return;
-    }
-    
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Maximum file size is 5MB",
-        variant: "destructive"
-      });
-      e.target.value = '';
-      return;
-    }
-    
-    setFormData((prev) => ({ ...prev, image: file }));
-    setImageFileName(file.name);
-    
-    if (formErrors.image) {
-      setFormErrors(prev => ({ ...prev, image: undefined }));
-    }
-  };
-
   const parseResume = async () => {
     const file = formData.resume;
     if (!file) {
@@ -400,7 +364,6 @@ const EventForm = () => {
       name?: string;
       email?: string;
       resume?: string;
-      image?: string;
     } = {};
     
     if (!formData.name.trim()) {
@@ -415,10 +378,6 @@ const EventForm = () => {
     
     if (!formData.resume) {
       errors.resume = "Please upload your resume";
-    }
-    
-    if (!formData.image) {
-      errors.image = "Please upload a profile image";
     }
     
     setFormErrors(errors);
@@ -460,23 +419,9 @@ const EventForm = () => {
     try {
       console.log("Starting file uploads...");
       
-      const imageFile = formData.image;
-      const imagePath = `${userId}/${Date.now()}_${imageFile.name}`;
+      const imageUrl = "https://placeholder.co/400";
       
-      const { error: imageError } = await supabase.storage
-        .from('profiles')
-        .upload(imagePath, imageFile);
-      
-      if (imageError) {
-        console.error("Image upload error:", imageError);
-        throw new Error(`Error uploading image: ${imageError.message}`);
-      }
-      
-      const { data: { publicUrl: imageUrl } } = supabase.storage
-        .from('profiles')
-        .getPublicUrl(imagePath);
-      
-      console.log("Image uploaded successfully:", imageUrl);
+      console.log("Using default profile image:", imageUrl);
       
       const resumeFile = formData.resume;
       const resumePath = `${userId}/${Date.now()}_${resumeFile.name}`;
@@ -735,39 +680,10 @@ const EventForm = () => {
               </div>
               
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label 
-                    htmlFor="profile-picture" 
-                    className={formErrors.image ? "text-destructive" : ""}
-                  >
-                    Profile Picture <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => imageInputRef.current?.click()}
-                      className={formErrors.image ? "border-destructive" : ""}
-                    >
-                      <Upload className="mr-2 h-4 w-4" />
-                      Upload Image
-                    </Button>
-                    {imageFileName && <span className="text-sm">{imageFileName}</span>}
-                  </div>
-                  <input 
-                    ref={imageInputRef}
-                    id="profile-picture" 
-                    name="profile-picture"
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={handleImageChange} 
-                    aria-invalid={!!formErrors.image}
-                    aria-describedby={formErrors.image ? "image-error" : undefined}
-                  />
-                  {formErrors.image && (
-                    <p id="image-error" className="text-sm text-destructive">{formErrors.image}</p>
-                  )}
+                <div className="p-4 border rounded-md flex flex-col items-center justify-center text-center text-muted-foreground">
+                  <UserX className="h-12 w-12 mb-2" />
+                  <p>Profile picture requirement removed</p>
+                  <p className="text-xs mt-1">A default image will be used</p>
                 </div>
                 
                 <div className="space-y-2">
