@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, generateProfileEmbedding } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/use-toast';
@@ -78,6 +78,7 @@ export const useProfileForm = (eventId?: string) => {
           .from('profiles')
           .select('*')
           .eq('id', userId)
+          .eq('event_id', eventId)
           .maybeSingle();
         
         if (profileError) {
@@ -135,6 +136,26 @@ export const useProfileForm = (eventId?: string) => {
     return Object.keys(errors).length === 0;
   };
 
+  // Add a function to generate embedding after profile update
+  const generateEmbedding = async (userId: string, eventId: string) => {
+    try {
+      const { success, error } = await generateProfileEmbedding(userId, eventId);
+      
+      if (!success) {
+        console.error("Error generating profile embedding:", error);
+        toast({
+          title: "Warning",
+          description: "Profile saved but embedding generation failed. Some features may be limited.",
+          variant: "destructive",
+        });
+      } else {
+        console.log("Profile embedding generated successfully");
+      }
+    } catch (error) {
+      console.error("Error calling generate embedding function:", error);
+    }
+  };
+
   return {
     event,
     formData,
@@ -149,6 +170,7 @@ export const useProfileForm = (eventId?: string) => {
     handleRadioChange,
     validateForm,
     isSubmitting,
-    setIsSubmitting
+    setIsSubmitting,
+    generateEmbedding
   };
 };

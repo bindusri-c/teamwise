@@ -16,3 +16,99 @@ export const handleSupabaseError = (error: any, defaultMessage = "An error occur
   console.error("Supabase operation error:", error);
   return error?.message || defaultMessage;
 };
+
+// Helper function to create a new event
+export const createEvent = async (eventName: string, userId: string) => {
+  try {
+    // Generate event code using the edge function
+    const { data: eventCode, error: codeError } = await supabase.functions.invoke('generate-event-code');
+    
+    if (codeError) throw codeError;
+    
+    // Create event in the database
+    const { data: event, error: eventError } = await supabase.from('events').insert({
+      name: eventName,
+      code: eventCode.code,
+      created_by: userId
+    }).select().single();
+    
+    if (eventError) throw eventError;
+    
+    return { success: true, event };
+  } catch (error) {
+    console.error("Error creating event:", error);
+    return { success: false, error };
+  }
+};
+
+// Helper function to join an event
+export const joinEvent = async (eventCode: string, userId: string) => {
+  try {
+    // Find event by code
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('*')
+      .eq('code', eventCode)
+      .single();
+    
+    if (eventError) throw eventError;
+    
+    // Check if user is already a participant
+    const { data: existingParticipant, error: participantError } = await supabase
+      .from('participants')
+      .select('*')
+      .eq('event_id', eventData.id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (participantError) throw participantError;
+    
+    // If user is not already a participant, add them
+    if (!existingParticipant) {
+      const { error: joinError } = await supabase
+        .from('participants')
+        .insert({
+          event_id: eventData.id,
+          user_id: userId
+        });
+      
+      if (joinError) throw joinError;
+    }
+    
+    return { success: true, event: eventData };
+  } catch (error) {
+    console.error("Error joining event:", error);
+    return { success: false, error };
+  }
+};
+
+// Helper function to generate embedding for a user profile
+export const generateProfileEmbedding = async (userId: string, eventId: string) => {
+  try {
+    // Get profile data
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .eq('event_id', eventId)
+      .single();
+    
+    if (profileError) throw profileError;
+    
+    if (!profileData) {
+      throw new Error("Profile not found");
+    }
+    
+    // Call the generate-embedding function
+    const { data, error } = await supabase.functions.invoke('generate-embedding', {
+      body: { userId, eventId, profileData }
+    });
+    
+    if (error) throw error;
+    
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error generating profile embedding:", error);
+    return { success: false, error };
+  }
+};

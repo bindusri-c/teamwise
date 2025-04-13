@@ -8,12 +8,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Label } from '@/components/ui/label';
 import { BrainCircuit } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('login');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { login, signup, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,12 +40,17 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrorMessage(null);
 
     try {
       const success = await login(email, password);
       if (success) {
         navigate('/dashboard');
+      } else {
+        setErrorMessage("Login failed. Please check your credentials and try again.");
       }
+    } catch (error: any) {
+      setErrorMessage(error.message || "An error occurred during login");
     } finally {
       setIsLoading(false);
     }
@@ -51,13 +59,37 @@ const Login = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrorMessage(null);
+
+    if (!name.trim()) {
+      setErrorMessage("Please enter your name");
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      await signup(email, password);
-      // We don't automatically navigate after signup as email verification may be required
+      const success = await signup(email, password, name);
+      if (success) {
+        // On successful signup, show success message and switch to login tab
+        setActiveTab('login');
+        setPassword('');
+        toast({
+          title: "Account created",
+          description: "Please check your email to verify your account, then log in.",
+        });
+      } else {
+        setErrorMessage("Signup failed. Please try again with a different email.");
+      }
+    } catch (error: any) {
+      setErrorMessage(error.message || "An error occurred during signup");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toast = (props: { title: string; description: string }) => {
+    // Simple alert since we don't have toast in this component
+    alert(`${props.title}: ${props.description}`);
   };
 
   return (
@@ -82,6 +114,14 @@ const Login = () => {
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
+            
+            {errorMessage && (
+              <div className="px-6 mb-4">
+                <Alert variant="destructive">
+                  <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+              </div>
+            )}
             
             <TabsContent value="login">
               <CardContent>
@@ -129,6 +169,18 @@ const Login = () => {
             <TabsContent value="signup">
               <CardContent>
                 <form onSubmit={handleSignup} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name-signup">Name</Label>
+                    <Input
+                      id="name-signup"
+                      type="text"
+                      placeholder="Your full name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      className="w-full"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="email-signup">Email</Label>
                     <Input
