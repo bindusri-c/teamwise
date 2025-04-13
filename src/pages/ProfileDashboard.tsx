@@ -26,6 +26,7 @@ const ProfileDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
   
   const [profileData, setProfileData] = useState({
     name: '',
@@ -292,7 +293,6 @@ const ProfileDashboard = () => {
     setIsSaving(true);
     
     try {
-      // Upload new resume if provided
       let resumeUrl = profileData.resumeUrl;
       
       if (newResume) {
@@ -314,14 +314,11 @@ const ProfileDashboard = () => {
         resumeUrl = publicUrl;
       }
       
-      // Get user data for the profile
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
       
-      // Convert age to number if present
       const ageValue = profileData.age ? parseInt(profileData.age.toString()) : null;
       
-      // Prepare profile data
       const updatedProfileData = {
         id: userId,
         name: profileData.name,
@@ -341,7 +338,6 @@ const ProfileDashboard = () => {
       
       console.log("Saving profile data to Supabase:", updatedProfileData);
       
-      // Save profile data
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert(updatedProfileData);
@@ -351,11 +347,9 @@ const ProfileDashboard = () => {
         throw new Error(`Error saving profile: ${profileError.message}`);
       }
       
-      // After saving to the database, generate embedding and update Pinecone
       setIsGeneratingEmbedding(true);
       
       try {
-        // Call the edge function to update profile embedding
         const { error: embeddingError } = await supabase.functions.invoke('update-profile-embedding', {
           body: {
             profileData: {
@@ -397,7 +391,6 @@ const ProfileDashboard = () => {
         description: "Your profile has been updated successfully"
       });
       
-      // Navigate to dashboard after successful save
       navigate('/dashboard');
       
     } catch (error) {
