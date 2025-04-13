@@ -174,7 +174,7 @@ serve(async (req) => {
     // Create a text representation of the profile for embedding
     const profileText = [
       profileData.name,
-      profileData.aboutYou,
+      profileData.aboutYou || profileData.about_you,
       profileData.skills?.join(" "),
       profileData.interests?.join(" "),
       profileData.hobbies,
@@ -201,8 +201,8 @@ serve(async (req) => {
         hobbies: profileData.hobbies || null,
         skills: profileData.skills || [],
         interests: profileData.interests || [],
-        about_you: profileData.aboutYou || null,
-        linkedin_url: profileData.linkedinUrl || null,
+        about_you: profileData.aboutYou || profileData.about_you || null,
+        linkedin_url: profileData.linkedinUrl || profileData.linkedin_url || null,
         updated_at: new Date().toISOString()
       })
       .eq('id', userId);

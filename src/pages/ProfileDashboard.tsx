@@ -246,6 +246,7 @@ const ProfileDashboard = () => {
           body: {
             profileData: {
               name: profileData.name,
+              email: userData.user?.email,
               age: profileData.age,
               gender: profileData.gender,
               hobbies: profileData.hobbies,
@@ -265,6 +266,8 @@ const ProfileDashboard = () => {
             description: "Profile saved, but there was an error updating embeddings for matching",
             variant: "destructive"
           });
+        } else {
+          console.log("Successfully generated and stored embedding");
         }
       } catch (embeddingError) {
         console.error("Error calling update-profile-embedding function:", embeddingError);

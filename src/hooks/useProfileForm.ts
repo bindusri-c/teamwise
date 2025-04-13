@@ -31,6 +31,7 @@ export const useProfileForm = (eventId?: string) => {
   
   const [resumeFileName, setResumeFileName] = useState<string>('');
   const [additionalFileNames, setAdditionalFileNames] = useState<string[]>([]);
+  const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState(false);
   
   useEffect(() => {
     if (eventId) {
@@ -134,6 +135,56 @@ export const useProfileForm = (eventId?: string) => {
     return Object.keys(errors).length === 0;
   };
 
+  const generateEmbedding = async () => {
+    if (!userId) return;
+    
+    setIsGeneratingEmbedding(true);
+    
+    try {
+      // Create a profile data object for embedding generation
+      const profileData = {
+        name: formData.name,
+        email: formData.email,
+        age: formData.age ? parseInt(formData.age) : null,
+        gender: formData.gender || null,
+        hobbies: formData.hobbies || null,
+        skills: formData.skills || [],
+        interests: formData.interests || [],
+        about_you: formData.aboutYou || null,
+        linkedin_url: formData.linkedinUrl || null,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Call the edge function to update profile and generate embedding
+      const { error: embeddingError } = await supabase.functions.invoke('update-profile-embedding', {
+        body: {
+          profileData,
+          userId
+        }
+      });
+      
+      if (embeddingError) {
+        console.error("Error generating embedding:", embeddingError);
+        toast({
+          title: "Warning",
+          description: "Profile saved, but there was an error updating embeddings for matching",
+          variant: "destructive"
+        });
+      } else {
+        console.log("Successfully generated and stored embedding");
+      }
+    } catch (error) {
+      console.error("Error calling update-profile-embedding function:", error);
+      toast({
+        title: "Warning",
+        description: "Profile saved, but there was an error updating embeddings for matching",
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingEmbedding(false);
+    }
+  };
+
   return {
     event,
     formData,
@@ -146,6 +197,8 @@ export const useProfileForm = (eventId?: string) => {
     setAdditionalFileNames,
     handleChange,
     handleRadioChange,
-    validateForm
+    validateForm,
+    isGeneratingEmbedding,
+    generateEmbedding
   };
 };
