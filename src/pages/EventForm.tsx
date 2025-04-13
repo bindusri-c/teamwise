@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -12,11 +11,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
 import { Loader2, Upload } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const EventForm = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { userId } = useCurrentUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [formData, setFormData] = useState<EventFormData>({
@@ -47,7 +48,7 @@ const EventForm = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleRadioChange = (value: string) => {
+  const handleRadioChange = (value: 'male' | 'female' | '') => {
     setFormData((prev) => ({ ...prev, gender: value }));
   };
   
@@ -76,7 +77,6 @@ const EventForm = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Check file type
     const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
     if (!validTypes.includes(file.type)) {
       toast({
@@ -88,7 +88,6 @@ const EventForm = () => {
       return;
     }
     
-    // Check file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
         title: "File too large",
@@ -139,7 +138,6 @@ const EventForm = () => {
       setAdditionalFileNames((prev) => [...prev, ...validFileNames]);
     }
     
-    // Reset the input
     e.target.value = '';
   };
 
@@ -147,7 +145,6 @@ const EventForm = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Check file type
     const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
     if (!validTypes.includes(file.type)) {
       toast({
@@ -159,7 +156,6 @@ const EventForm = () => {
       return;
     }
     
-    // Check file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
         title: "File too large",
@@ -188,9 +184,7 @@ const EventForm = () => {
     setIsParsing(true);
     
     try {
-      // For PDF files
       if (file.type === 'application/pdf') {
-        // Load PDF.js if not loaded
         if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
           pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
         }
@@ -200,7 +194,6 @@ const EventForm = () => {
         
         let fullText = '';
         
-        // Extract text from each page
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const textContent = await page.getTextContent();
@@ -208,7 +201,6 @@ const EventForm = () => {
           fullText += pageText + ' ';
         }
         
-        // Very basic parsing - this would be more sophisticated in a real app
         const extractedData = {
           name: extractField(fullText, /name:?\s*([A-Za-z\s]+)/i) || '',
           email: extractEmail(fullText) || '',
@@ -231,7 +223,6 @@ const EventForm = () => {
           description: "Resume data has been extracted and filled in the form"
         });
       } else {
-        // For DOCX files - in a real app you would use a library like mammoth.js
         toast({
           title: "DOCX parsing not implemented",
           description: "DOCX parsing is not implemented in this demo"
@@ -249,7 +240,6 @@ const EventForm = () => {
     }
   };
   
-  // Simple extraction helpers
   const extractField = (text: string, regex: RegExp): string | null => {
     const match = text.match(regex);
     return match ? match[1].trim() : null;
@@ -262,7 +252,6 @@ const EventForm = () => {
   };
   
   const extractSkills = (text: string): string[] => {
-    // This is a very simple implementation
     const skillKeywords = ['javascript', 'python', 'react', 'node', 'html', 'css', 'sql', 'java', 'c++', 'leadership', 'management'];
     return skillKeywords.filter(skill => 
       new RegExp(`\\b${skill}\\b`, 'i').test(text)
@@ -270,7 +259,6 @@ const EventForm = () => {
   };
   
   const extractInterests = (text: string): string[] => {
-    // Simple implementation
     const interestKeywords = ['travel', 'music', 'sports', 'reading', 'photography', 'cooking', 'gaming', 'hiking'];
     return interestKeywords.filter(interest => 
       new RegExp(`\\b${interest}\\b`, 'i').test(text)
@@ -294,53 +282,45 @@ const EventForm = () => {
       return;
     }
     
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "You need to be logged in to submit the form",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
-      // Upload files to Supabase storage
-      const user = (await supabase.auth.getUser()).data.user;
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
+      const { data: imageData, error: imageError } = await supabase.storage
+        .from('profiles')
+        .upload(`${userId}/${Date.now()}_${formData.image.name}`, formData.image);
       
-      // Upload profile image if exists
-      let imageUrl = '';
-      if (formData.image) {
-        const { data: imageData, error: imageError } = await supabase.storage
-          .from('profiles')
-          .upload(`${user.id}/${Date.now()}_${formData.image.name}`, formData.image);
-        
-        if (imageError) throw imageError;
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('profiles')
-          .getPublicUrl(imageData.path);
+      if (imageError) throw imageError;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('profiles')
+        .getPublicUrl(imageData.path);
           
-        imageUrl = publicUrl;
-      }
+      const imageUrl = publicUrl;
       
-      // Upload resume if exists
-      let resumeUrl = '';
-      if (formData.resume) {
-        const { data: resumeData, error: resumeError } = await supabase.storage
-          .from('resumes')
-          .upload(`${user.id}/${Date.now()}_${formData.resume.name}`, formData.resume);
-        
-        if (resumeError) throw resumeError;
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('resumes')
-          .getPublicUrl(resumeData.path);
+      const { data: resumeData, error: resumeError } = await supabase.storage
+        .from('resumes')
+        .upload(`${userId}/${Date.now()}_${formData.resume.name}`, formData.resume);
+      
+      if (resumeError) throw resumeError;
+      
+      const { data: { publicUrl: resumeUrl } } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(resumeData.path);
           
-        resumeUrl = publicUrl;
-      }
-      
-      // Upload additional files if any
       const additionalFilesUrls: string[] = [];
       for (const file of formData.additionalFiles) {
         const { data: fileData, error: fileError } = await supabase.storage
           .from('additional_files')
-          .upload(`${user.id}/${Date.now()}_${file.name}`, file);
+          .upload(`${userId}/${Date.now()}_${file.name}`, file);
         
         if (fileError) throw fileError;
         
@@ -351,16 +331,14 @@ const EventForm = () => {
         additionalFilesUrls.push(publicUrl);
       }
       
-      // Prepare form data for API call
       const submissionData = {
         ...formData,
         imageUrl,
         resumeUrl,
         additionalFiles: additionalFilesUrls,
-        linkedinUrl: ''  // Default empty
+        linkedinUrl: ''
       };
       
-      // Call the edge function to generate embeddings and store profile
       const { data: responseData, error: responseError } = await supabase.functions
         .invoke('generate-embedding', {
           body: { 
@@ -376,7 +354,6 @@ const EventForm = () => {
         description: "Your profile has been submitted successfully"
       });
       
-      // Navigate to dashboard
       navigate('/dashboard');
       
     } catch (error) {
@@ -402,7 +379,6 @@ const EventForm = () => {
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Basic Information */}
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="name">Full Name</Label>
@@ -466,7 +442,6 @@ const EventForm = () => {
                 </div>
               </div>
               
-              {/* Files and Tags */}
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="profile-picture">Profile Picture</Label>
@@ -569,7 +544,6 @@ const EventForm = () => {
               </div>
             </div>
             
-            {/* Skills and Interests */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="skills-input">Skills (press Enter after each)</Label>
@@ -618,7 +592,6 @@ const EventForm = () => {
               </div>
             </div>
             
-            {/* About and Looking For */}
             <div className="space-y-4">
               <div>
                 <Label htmlFor="aboutYou">About You</Label>
