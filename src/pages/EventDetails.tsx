@@ -69,7 +69,7 @@ const EventDetails = () => {
       if (userId && profilesData.length > 0) {
         await fetchSimilarityScores(profilesData);
       } else {
-        const filteredProfiles = profilesData.filter(profile => profile.id !== userId) as ProfileWithSimilarity[];
+        const filteredProfiles = profilesData as ProfileWithSimilarity[];
         setProfiles(filteredProfiles);
       }
     } catch (error: any) {

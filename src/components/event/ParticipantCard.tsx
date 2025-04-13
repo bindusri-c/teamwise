@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,8 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
     if (score > 0.2) return "bg-orange-400 text-white";
     return "bg-red-400 text-white";
   };
+
+  console.log(`Rendering card for ${profile.name} with similarity score:`, profile.similarity_score);
 
   return (
     <Card key={profile.id} className="overflow-hidden">
@@ -123,12 +126,10 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
       </CardContent>
       
       <CardFooter className="bg-muted/30 justify-between">
-        {profile.similarity_score !== undefined && (
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Percent className="h-3 w-3" />
-            Match: {formatSimilarityPercentage(profile.similarity_score)}
-          </Badge>
-        )}
+        <Badge variant="outline" className="flex items-center gap-1">
+          <Percent className="h-3 w-3" />
+          Match: {profile.similarity_score !== undefined ? formatSimilarityPercentage(profile.similarity_score) : 'N/A'}
+        </Badge>
         
         {profile.linkedin_url ? (
           <a 
