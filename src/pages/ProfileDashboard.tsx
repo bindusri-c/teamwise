@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -15,6 +14,10 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import ProfileBasicInfo from '@/components/profile/ProfileBasicInfo';
+import ProfileAboutSection from '@/components/profile/ProfileAboutSection';
+import TagInput from '@/components/profile/TagInput';
+import ResumeUpload from '@/components/profile/ResumeUpload';
 
 const ProfileDashboard = () => {
   const navigate = useNavigate();
@@ -22,7 +25,7 @@ const ProfileDashboard = () => {
   const { userId } = useCurrentUser();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
+  const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState(false);
   
   const [profileData, setProfileData] = useState({
     name: '',
@@ -127,18 +130,11 @@ const ProfileDashboard = () => {
     setProfileData(prev => ({ ...prev, gender: value }));
   };
   
-  const handleTagInputChange = (e: React.KeyboardEvent<HTMLInputElement>, field: 'skills' | 'interests') => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      const value = (e.target as HTMLInputElement).value.trim();
-      if (value) {
-        setProfileData(prev => ({
-          ...prev,
-          [field]: [...prev[field], value]
-        }));
-        (e.target as HTMLInputElement).value = '';
-      }
-    }
+  const handleTagInputChange = (tag: string, field: 'skills' | 'interests') => {
+    setProfileData(prev => ({
+      ...prev,
+      [field]: [...prev[field], tag]
+    }));
   };
   
   const removeTag = (index: number, field: 'skills' | 'interests') => {
@@ -148,31 +144,7 @@ const ProfileDashboard = () => {
     }));
   };
   
-  const handleResumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!validTypes.includes(file.type)) {
-      toast({
-        title: "Invalid file type",
-        description: "Only PDF and DOCX files are allowed for resume",
-        variant: "destructive"
-      });
-      e.target.value = '';
-      return;
-    }
-    
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Maximum file size is 5MB",
-        variant: "destructive"
-      });
-      e.target.value = '';
-      return;
-    }
-    
+  const handleResumeChange = (file: File) => {
     setNewResume(file);
     setResumeFileName(file.name);
     
@@ -181,7 +153,7 @@ const ProfileDashboard = () => {
     }
   };
   
-  const parseResume = async () => {
+  const parseResume = async (pdfText: string) => {
     const file = newResume;
     if (!file) {
       toast({
@@ -379,10 +351,54 @@ const ProfileDashboard = () => {
         throw new Error(`Error saving profile: ${profileError.message}`);
       }
       
+      // After saving to the database, generate embedding and update Pinecone
+      setIsGeneratingEmbedding(true);
+      
+      try {
+        // Call the edge function to update profile embedding
+        const { error: embeddingError } = await supabase.functions.invoke('update-profile-embedding', {
+          body: {
+            profileData: {
+              name: profileData.name,
+              age: profileData.age,
+              gender: profileData.gender,
+              hobbies: profileData.hobbies,
+              skills: profileData.skills,
+              interests: profileData.interests,
+              aboutYou: profileData.aboutYou,
+              lookingFor: profileData.lookingFor,
+              linkedinUrl: profileData.linkedinUrl
+            },
+            userId
+          }
+        });
+        
+        if (embeddingError) {
+          console.error("Error generating embedding:", embeddingError);
+          toast({
+            title: "Warning",
+            description: "Profile saved, but there was an error updating embeddings for matching",
+            variant: "destructive"
+          });
+        }
+      } catch (embeddingError) {
+        console.error("Error calling update-profile-embedding function:", embeddingError);
+        toast({
+          title: "Warning",
+          description: "Profile saved, but there was an error updating embeddings for matching",
+          variant: "destructive"
+        });
+      } finally {
+        setIsGeneratingEmbedding(false);
+      }
+      
       toast({
         title: "Success",
         description: "Your profile has been updated successfully"
       });
+      
+      // Navigate to dashboard after successful save
+      navigate('/dashboard');
       
     } catch (error) {
       console.error("Error submitting form:", error);
@@ -487,77 +503,22 @@ const ProfileDashboard = () => {
                       <p className="text-xs text-muted-foreground mt-1">Email cannot be changed</p>
                     </div>
                     
-                    <div>
-                      <Label htmlFor="age">Age</Label>
-                      <Input 
-                        id="age" 
-                        name="age" 
-                        type="number" 
-                        min="18" 
-                        max="120" 
-                        value={profileData.age} 
-                        onChange={handleChange} 
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label>Gender</Label>
-                      <RadioGroup value={profileData.gender} onValueChange={handleRadioChange} className="mt-2">
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="male" id="male" />
-                          <Label htmlFor="male">Male</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="female" id="female" />
-                          <Label htmlFor="female">Female</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
+                    <ProfileBasicInfo
+                      age={profileData.age}
+                      gender={profileData.gender}
+                      hobbies={profileData.hobbies}
+                      linkedinUrl={profileData.linkedinUrl}
+                      onInputChange={handleChange}
+                      onGenderChange={handleRadioChange}
+                    />
                   </div>
                   
                   <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="hobbies">Hobbies</Label>
-                      <Input 
-                        id="hobbies" 
-                        name="hobbies" 
-                        value={profileData.hobbies} 
-                        onChange={handleChange} 
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="linkedinUrl">LinkedIn URL</Label>
-                      <Input 
-                        id="linkedinUrl" 
-                        name="linkedinUrl" 
-                        value={profileData.linkedinUrl} 
-                        onChange={handleChange} 
-                        placeholder="https://linkedin.com/in/username"
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="aboutYou">About You</Label>
-                      <Textarea 
-                        id="aboutYou" 
-                        name="aboutYou" 
-                        value={profileData.aboutYou} 
-                        onChange={handleChange} 
-                        rows={4} 
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="lookingFor">Who are you looking to connect with?</Label>
-                      <Textarea 
-                        id="lookingFor" 
-                        name="lookingFor" 
-                        value={profileData.lookingFor} 
-                        onChange={handleChange} 
-                        rows={4} 
-                      />
-                    </div>
+                    <ProfileAboutSection
+                      aboutYou={profileData.aboutYou}
+                      lookingFor={profileData.lookingFor}
+                      onInputChange={handleChange}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -566,99 +527,32 @@ const ProfileDashboard = () => {
             <TabsContent value="resume" className="p-0">
               <CardContent className="space-y-6 mt-4">
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Label htmlFor="resume">Resume (PDF)</Label>
-                      {newResume && (
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={parseResume}
-                          disabled={isParsing}
-                        >
-                          {isParsing ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Parsing...
-                            </>
-                          ) : (
-                            "Autofill from Resume"
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => resumeInputRef.current?.click()}
-                      >
-                        <Upload className="mr-2 h-4 w-4" />
-                        Upload Resume
-                      </Button>
-                      {resumeFileName && <span className="text-sm">{resumeFileName}</span>}
-                    </div>
-                    <input 
-                      ref={resumeInputRef}
-                      id="resume" 
-                      name="resume"
-                      type="file" 
-                      accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
-                      className="hidden" 
-                      onChange={handleResumeChange} 
-                    />
-                    <p className="text-xs text-muted-foreground italic mt-1">
-                      Note: Only PDF files can be parsed automatically.
-                    </p>
-                  </div>
+                  <ResumeUpload
+                    resumeFileName={resumeFileName}
+                    hasError={!!formErrors.resume}
+                    errorMessage={formErrors.resume}
+                    onResumeChange={handleResumeChange}
+                    onParseResume={parseResume}
+                  />
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="skills-input">Skills (press Enter after each)</Label>
-                      <Input 
-                        id="skills-input" 
-                        placeholder="Add a skill and press Enter" 
-                        onKeyDown={(e) => handleTagInputChange(e, 'skills')} 
-                      />
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {profileData.skills.map((skill, index) => (
-                          <div key={index} className="bg-secondary px-3 py-1 rounded-full flex items-center text-sm">
-                            {skill}
-                            <button 
-                              type="button" 
-                              className="ml-2 text-secondary-foreground/70 hover:text-secondary-foreground"
-                              onClick={() => removeTag(index, 'skills')}
-                            >
-                              &times;
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <TagInput
+                      label="Skills (press Enter after each)"
+                      id="skills-input"
+                      placeholder="Add a skill and press Enter"
+                      tags={profileData.skills}
+                      onAddTag={(tag) => handleTagInputChange(tag, 'skills')}
+                      onRemoveTag={(index) => removeTag(index, 'skills')}
+                    />
                     
-                    <div className="space-y-2">
-                      <Label htmlFor="interests-input">Interests (press Enter after each)</Label>
-                      <Input 
-                        id="interests-input" 
-                        placeholder="Add an interest and press Enter" 
-                        onKeyDown={(e) => handleTagInputChange(e, 'interests')} 
-                      />
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {profileData.interests.map((interest, index) => (
-                          <div key={index} className="bg-secondary px-3 py-1 rounded-full flex items-center text-sm">
-                            {interest}
-                            <button 
-                              type="button" 
-                              className="ml-2 text-secondary-foreground/70 hover:text-secondary-foreground"
-                              onClick={() => removeTag(index, 'interests')}
-                            >
-                              &times;
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <TagInput
+                      label="Interests (press Enter after each)"
+                      id="interests-input"
+                      placeholder="Add an interest and press Enter"
+                      tags={profileData.interests}
+                      onAddTag={(tag) => handleTagInputChange(tag, 'interests')}
+                      onRemoveTag={(index) => removeTag(index, 'interests')}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -674,12 +568,12 @@ const ProfileDashboard = () => {
               </Button>
               <Button 
                 type="submit" 
-                disabled={isSaving}
+                disabled={isSaving || isGeneratingEmbedding}
               >
-                {isSaving ? (
+                {isSaving || isGeneratingEmbedding ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
+                    {isGeneratingEmbedding ? "Processing..." : "Saving..."}
                   </>
                 ) : (
                   <>
