@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -9,19 +10,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
-import { Loader2, Upload, ArrowLeft, AlertCircle, Info, UserX } from 'lucide-react';
+import { Loader2, Upload, ArrowLeft, AlertCircle, Info } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { 
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-  FormDescription
-} from '@/components/ui/form';
 
 const EventForm = () => {
   const { eventId } = useParams<{ eventId: string }>();
@@ -48,8 +40,6 @@ const EventForm = () => {
   });
   
   const [formErrors, setFormErrors] = useState<{
-    name?: string;
-    email?: string;
     resume?: string;
   }>({});
   
@@ -252,56 +242,53 @@ const EventForm = () => {
       return;
     }
     
+    if (file.type !== 'application/pdf') {
+      toast({
+        title: "PDF files only",
+        description: "Only PDF files can be parsed automatically",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsParsing(true);
     
     try {
-      if (file.type === 'application/pdf') {
-        if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-        }
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        
-        let fullText = '';
-        
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map((item: any) => item.str).join(' ');
-          fullText += pageText + ' ';
-        }
-        
-        const extractedData = {
-          name: extractField(fullText, /name:?\s*([A-Za-z\s]+)/i) || 
-                extractField(fullText, /^([A-Z][a-z]+(?: [A-Z][a-z]+){1,2})/m),
-          email: extractEmail(fullText) || '',
-          skills: extractSkills(fullText),
-          interests: extractInterests(fullText),
-          linkedinUrl: extractLinkedInUrl(fullText) || '',
-          aboutYou: extractParagraph(fullText, 100)
-        };
-        
-        setFormData(prev => ({
-          ...prev,
-          name: extractedData.name || prev.name,
-          email: extractedData.email || prev.email,
-          linkedinUrl: extractedData.linkedinUrl || prev.linkedinUrl,
-          skills: [...new Set([...prev.skills, ...extractedData.skills])],
-          interests: [...new Set([...prev.interests, ...extractedData.interests])],
-          aboutYou: extractedData.aboutYou || prev.aboutYou
-        }));
-        
-        toast({
-          title: "Resume parsed",
-          description: "Resume data has been extracted and filled in the form"
-        });
-      } else {
-        toast({
-          title: "DOCX parsing not implemented",
-          description: "DOCX parsing is not implemented in this demo"
-        });
+      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
       }
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        fullText += pageText + ' ';
+      }
+      
+      const extractedData = {
+        skills: extractSkills(fullText),
+        interests: extractInterests(fullText),
+        linkedinUrl: extractLinkedInUrl(fullText) || '',
+        aboutYou: extractParagraph(fullText, 100)
+      };
+      
+      setFormData(prev => ({
+        ...prev,
+        linkedinUrl: extractedData.linkedinUrl || prev.linkedinUrl,
+        skills: [...new Set([...prev.skills, ...extractedData.skills])],
+        interests: [...new Set([...prev.interests, ...extractedData.interests])],
+        aboutYou: extractedData.aboutYou || prev.aboutYou
+      }));
+      
+      toast({
+        title: "Resume parsed",
+        description: "Resume data has been extracted and filled in the form"
+      });
     } catch (error) {
       console.error("Error parsing resume:", error);
       toast({
@@ -312,17 +299,6 @@ const EventForm = () => {
     } finally {
       setIsParsing(false);
     }
-  };
-  
-  const extractField = (text: string, regex: RegExp): string | null => {
-    const match = text.match(regex);
-    return match ? match[1].trim() : null;
-  };
-  
-  const extractEmail = (text: string): string | null => {
-    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
-    const match = text.match(emailRegex);
-    return match ? match[0] : null;
   };
   
   const extractLinkedInUrl = (text: string): string | null => {
@@ -361,20 +337,8 @@ const EventForm = () => {
 
   const validateForm = (): boolean => {
     const errors: {
-      name?: string;
-      email?: string;
       resume?: string;
     } = {};
-    
-    if (!formData.name.trim()) {
-      errors.name = "Full name is required";
-    }
-    
-    if (!formData.email.trim()) {
-      errors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = "Please enter a valid email address";
-    }
     
     if (!formData.resume) {
       errors.resume = "Please upload your resume";
@@ -408,7 +372,7 @@ const EventForm = () => {
     if (!validateForm()) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields",
+        description: "Please upload your resume to continue",
         variant: "destructive"
       });
       return;
@@ -419,10 +383,11 @@ const EventForm = () => {
     try {
       console.log("Starting file uploads...");
       
+      // Use default image
       const imageUrl = "https://placeholder.co/400";
-      
       console.log("Using default profile image:", imageUrl);
       
+      // Upload resume
       const resumeFile = formData.resume;
       const resumePath = `${userId}/${Date.now()}_${resumeFile.name}`;
       
@@ -441,6 +406,7 @@ const EventForm = () => {
       
       console.log("Resume uploaded successfully:", resumeUrl);
       
+      // Upload additional files if any
       const additionalFilesUrls: string[] = [];
       
       for (const file of formData.additionalFiles) {
@@ -464,13 +430,19 @@ const EventForm = () => {
       
       console.log("Additional files uploaded successfully:", additionalFilesUrls);
       
-      const ageValue = formData.age ? (typeof formData.age === 'string' ? parseInt(formData.age) : formData.age) : null;
+      // Get user data for the profile
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
       
+      // Convert age to number if present
+      const ageValue = formData.age ? parseInt(formData.age.toString()) : null;
+      
+      // Prepare profile data
       const profileData = {
         id: userId,
         event_id: eventId,
-        name: formData.name,
-        email: formData.email,
+        name: userData.user?.user_metadata?.full_name || userData.user?.email?.split('@')[0] || 'Anonymous User',
+        email: userData.user?.email || '',
         age: ageValue,
         gender: formData.gender || null,
         hobbies: formData.hobbies || null,
@@ -487,6 +459,7 @@ const EventForm = () => {
       
       console.log("Saving profile data to Supabase:", profileData);
       
+      // Save profile data
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert(profileData);
@@ -498,6 +471,7 @@ const EventForm = () => {
       
       console.log("Profile saved successfully");
       
+      // Generate embedding for matching
       const { error: embeddingError } = await supabase.functions
         .invoke('generate-embedding', {
           body: { 
@@ -518,6 +492,7 @@ const EventForm = () => {
         console.log("Embedding generated successfully");
       }
       
+      // Add as participant
       const { error: participantError } = await supabase
         .from('participants')
         .upsert({
@@ -579,57 +554,6 @@ const EventForm = () => {
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="name" className={formErrors.name ? "text-destructive" : ""}>
-                      Full Name <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="text-xs flex items-center text-muted-foreground">
-                      <Info className="h-3 w-3 mr-1" />
-                      From your account
-                    </div>
-                  </div>
-                  <Input 
-                    id="name" 
-                    name="name" 
-                    value={formData.name} 
-                    onChange={handleChange} 
-                    className={formErrors.name ? "border-destructive" : ""}
-                    aria-invalid={!!formErrors.name}
-                    aria-describedby={formErrors.name ? "name-error" : undefined}
-                    placeholder="Your full name"
-                  />
-                  {formErrors.name && (
-                    <p id="name-error" className="text-sm text-destructive">{formErrors.name}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="email" className={formErrors.email ? "text-destructive" : ""}>
-                      Email <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="text-xs flex items-center text-muted-foreground">
-                      <Info className="h-3 w-3 mr-1" />
-                      From your account
-                    </div>
-                  </div>
-                  <Input 
-                    id="email" 
-                    name="email" 
-                    type="email" 
-                    value={formData.email} 
-                    onChange={handleChange} 
-                    className={formErrors.email ? "border-destructive" : ""}
-                    aria-invalid={!!formErrors.email}
-                    aria-describedby={formErrors.email ? "email-error" : undefined}
-                    readOnly
-                  />
-                  {formErrors.email && (
-                    <p id="email-error" className="text-sm text-destructive">{formErrors.email}</p>
-                  )}
-                </div>
-                
                 <div>
                   <Label htmlFor="age">Age</Label>
                   <Input 
@@ -680,19 +604,13 @@ const EventForm = () => {
               </div>
               
               <div className="space-y-4">
-                <div className="p-4 border rounded-md flex flex-col items-center justify-center text-center text-muted-foreground">
-                  <UserX className="h-12 w-12 mb-2" />
-                  <p>Profile picture requirement removed</p>
-                  <p className="text-xs mt-1">A default image will be used</p>
-                </div>
-                
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <Label 
                       htmlFor="resume"
                       className={formErrors.resume ? "text-destructive" : ""}
                     >
-                      Resume (PDF/DOCX) <span className="text-destructive">*</span>
+                      Resume (PDF) <span className="text-destructive">*</span>
                     </Label>
                     {formData.resume && (
                       <Button 
@@ -730,7 +648,7 @@ const EventForm = () => {
                     id="resume" 
                     name="resume"
                     type="file" 
-                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                    accept=".pdf,application/pdf" 
                     className="hidden" 
                     onChange={handleResumeChange} 
                     aria-invalid={!!formErrors.resume}
@@ -739,6 +657,9 @@ const EventForm = () => {
                   {formErrors.resume && (
                     <p id="resume-error" className="text-sm text-destructive">{formErrors.resume}</p>
                   )}
+                  <p className="text-xs text-muted-foreground italic mt-1">
+                    Note: Only PDF files can be parsed automatically.
+                  </p>
                 </div>
                 
                 <div className="space-y-2">
