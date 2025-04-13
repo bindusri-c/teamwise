@@ -5,8 +5,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Profile = {
   id: string;
@@ -131,15 +132,22 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
   // Function to calculate similarity scores via edge function
   const calculateSimilarityScores = async () => {
     setIsRefreshing(true);
+    setError(null);
     try {
+      // Adding error handling for edge function call
+      console.log("Calling calculate-similarity function for event:", eventId, "and profile:", userId);
+      
       const { data, error } = await supabase.functions.invoke('calculate-similarity', {
         body: { eventId, profileId: userId }
       });
 
       if (error) {
+        console.error("Error calculating similarity scores:", error);
         throw error;
       }
 
+      console.log("Similarity calculation response:", data);
+      
       toast({
         title: "Success",
         description: "Similarity scores updated successfully.",
@@ -149,6 +157,7 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
       await fetchSimilarProfiles();
     } catch (error: any) {
       console.error("Error calculating similarity scores:", error);
+      setError("Failed to calculate similarity scores. The service might be temporarily unavailable. Please try again later.");
       toast({
         title: "Error",
         description: "Failed to calculate similarity scores.",
@@ -196,11 +205,14 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
             ) : (
               <RefreshCw className="h-4 w-4 mr-2" />
             )}
-            Refresh
+            Retry
           </Button>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">{error}</p>
+          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <p>{error}</p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -226,8 +238,20 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="flex justify-center p-4">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center space-x-4 p-2 rounded-lg border">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-1/3" />
+                  <div className="flex gap-1">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </div>
+                <Skeleton className="h-6 w-24" />
+              </div>
+            ))}
           </div>
         ) : similarProfiles.length > 0 ? (
           <div className="space-y-4">
