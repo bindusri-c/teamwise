@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Upload, ArrowLeft, User, FileText, Save, AlertCircle } from 'lucide-react';
-import * as pdfjsLib from 'pdfjs-dist';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -26,7 +25,6 @@ const ProfileDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
   
   const [profileData, setProfileData] = useState({
     name: '',
@@ -152,110 +150,6 @@ const ProfileDashboard = () => {
     if (formErrors.resume) {
       setFormErrors(prev => ({ ...prev, resume: undefined }));
     }
-  };
-  
-  const parseResume = async (pdfText: string) => {
-    const file = newResume;
-    if (!file) {
-      toast({
-        title: "No resume uploaded",
-        description: "Please upload a resume first",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (file.type !== 'application/pdf') {
-      toast({
-        title: "PDF files only",
-        description: "Only PDF files can be parsed automatically",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsParsing(true);
-    
-    try {
-      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-      }
-      
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
-      let fullText = '';
-      
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
-        fullText += pageText + ' ';
-      }
-      
-      const extractedData = {
-        skills: extractSkills(fullText),
-        interests: extractInterests(fullText),
-        linkedinUrl: extractLinkedInUrl(fullText) || '',
-        aboutYou: extractParagraph(fullText, 100)
-      };
-      
-      setProfileData(prev => ({
-        ...prev,
-        linkedinUrl: extractedData.linkedinUrl || prev.linkedinUrl,
-        skills: [...new Set([...prev.skills, ...extractedData.skills])],
-        interests: [...new Set([...prev.interests, ...extractedData.interests])],
-        aboutYou: extractedData.aboutYou || prev.aboutYou
-      }));
-      
-      toast({
-        title: "Resume parsed",
-        description: "Resume data has been extracted and filled in the form"
-      });
-    } catch (error) {
-      console.error("Error parsing resume:", error);
-      toast({
-        title: "Error parsing resume",
-        description: "There was an error parsing your resume",
-        variant: "destructive"
-      });
-    } finally {
-      setIsParsing(false);
-    }
-  };
-  
-  const extractLinkedInUrl = (text: string): string | null => {
-    const linkedinRegex = /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+(?:\/)?/i;
-    const match = text.match(linkedinRegex);
-    return match ? match[0] : null;
-  };
-  
-  const extractSkills = (text: string): string[] => {
-    const skillKeywords = [
-      'javascript', 'python', 'react', 'node', 'html', 'css', 'sql', 'java', 'c\\+\\+',
-      'leadership', 'management', 'communication', 'teamwork', 'problem solving',
-      'analytics', 'excel', 'powerpoint', 'project management', 'public speaking',
-      'research', 'design', 'photoshop', 'illustrator', 'agile', 'scrum'
-    ];
-    return skillKeywords.filter(skill => 
-      new RegExp(`\\b${skill}\\b`, 'i').test(text)
-    );
-  };
-  
-  const extractInterests = (text: string): string[] => {
-    const interestKeywords = [
-      'travel', 'music', 'sports', 'reading', 'photography', 'cooking', 'gaming', 'hiking',
-      'yoga', 'meditation', 'art', 'dancing', 'volunteering', 'cycling', 'running',
-      'swimming', 'chess', 'writing', 'blogging', 'podcasting', 'movies', 'theater'
-    ];
-    return interestKeywords.filter(interest => 
-      new RegExp(`\\b${interest}\\b`, 'i').test(text)
-    );
-  };
-  
-  const extractParagraph = (text: string, maxWords: number): string => {
-    const words = text.split(/\s+/).slice(0, maxWords);
-    return words.join(' ');
   };
   
   const validateForm = (): boolean => {
@@ -525,7 +419,6 @@ const ProfileDashboard = () => {
                     hasError={!!formErrors.resume}
                     errorMessage={formErrors.resume}
                     onResumeChange={handleResumeChange}
-                    onParseResume={parseResume}
                   />
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
