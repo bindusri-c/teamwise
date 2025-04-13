@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import EventHeader from '@/components/event/EventHeader';
 import ParticipantsList from '@/components/event/ParticipantsList';
@@ -37,7 +36,6 @@ const EventDetails = () => {
   const [profiles, setProfiles] = useState<ProfileWithSimilarity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreator, setIsCreator] = useState(false);
-  const [regeneratingEmbedding, setRegeneratingEmbedding] = useState(false);
 
   useEffect(() => {
     if (eventId) {
@@ -68,10 +66,8 @@ const EventDetails = () => {
       if (profilesError) throw profilesError;
       
       if (userId && profilesData.length > 0) {
-        // Just fetch similarity scores if they exist, don't auto-calculate
         await fetchExistingSimilarityScores(profilesData);
       } else {
-        // When no similarity scores are available, initialize profiles without scores
         console.log('No similarity scores available, setting profiles without scores');
         const initialProfiles = profilesData as ProfileWithSimilarity[];
         setProfiles(initialProfiles);
@@ -93,7 +89,6 @@ const EventDetails = () => {
     if (!userId || !eventId) return;
     
     try {      
-      // Fetch all similarity scores where the current user is involved
       const { data: similarityData, error: similarityError } = await supabase
         .from('profile_similarities')
         .select('profile_id_1, profile_id_2, similarity_score')
@@ -102,98 +97,30 @@ const EventDetails = () => {
       
       if (similarityError) throw similarityError;
       
-      console.log('Similarity data from database:', similarityData);
-      
-      // Map the profiles with their similarity scores
       const profilesWithSimilarity = profilesData.map(profile => {
-        // If this is the current user, set similarity to 1.0 (100% match with self)
         if (profile.id === userId) {
           return { ...profile, similarity_score: 1.0 };
         }
         
-        // Find the similarity entry for this profile pair
         const similarityEntry = similarityData?.find(
           entry => 
             (entry.profile_id_1 === userId && entry.profile_id_2 === profile.id) ||
             (entry.profile_id_1 === profile.id && entry.profile_id_2 === userId)
         );
         
-        // Add the similarity score to the profile
-        // Default to 0 instead of undefined when no score is found
         const similarityScore = similarityEntry?.similarity_score !== undefined 
           ? similarityEntry.similarity_score 
           : 0;
           
-        console.log(`Similarity score for ${profile.name}:`, similarityScore);
-        
         return {
           ...profile,
           similarity_score: similarityScore
         };
       });
       
-      console.log('Profiles with similarity scores:', profilesWithSimilarity);
-      
       setProfiles(profilesWithSimilarity);
     } catch (error) {
       console.error('Error fetching similarity scores:', error);
-    }
-  };
-
-  const regenerateEmbedding = async () => {
-    if (!userId || !eventId) return;
-    
-    setRegeneratingEmbedding(true);
-    try {
-      // Fetch the current user's profile for this event
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .eq('event_id', eventId)
-        .single();
-        
-      if (profileError) throw profileError;
-      
-      if (!profileData) {
-        toast({
-          title: "Profile not found",
-          description: "You need to register for this event first",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Call the edge function to regenerate embedding
-      const { error: embeddingError } = await supabase.functions
-        .invoke('generate-embedding', {
-          body: { 
-            userId,
-            eventId,
-            profileData
-          }
-        });
-      
-      if (embeddingError) throw embeddingError;
-      
-      toast({
-        title: "Success",
-        description: "Your profile embedding has been regenerated successfully.",
-        duration: 5000,
-      });
-      
-      // Refresh the data
-      await fetchEventDetails();
-      
-    } catch (error: any) {
-      console.error('Error regenerating embedding:', error);
-      toast({
-        title: "Error",
-        description: "Failed to regenerate embedding. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setRegeneratingEmbedding(false);
     }
   };
 
@@ -246,24 +173,6 @@ const EventDetails = () => {
         isCreator={isCreator} 
         userHasProfile={userHasProfile} 
       />
-      
-      {userHasProfile && userId && eventId && (
-        <div className="mb-8">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={regenerateEmbedding}
-            disabled={regeneratingEmbedding}
-            className="mb-2"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${regeneratingEmbedding ? 'animate-spin' : ''}`} />
-            {regeneratingEmbedding ? 'Regenerating...' : 'Regenerate My Embedding'}
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            Your embedding includes text from your uploaded resume for better matching.
-          </p>
-        </div>
-      )}
       
       <ParticipantsList profiles={profiles} />
     </div>
