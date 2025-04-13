@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Linkedin, User, ArrowLeft, UserPlus, Copy, CheckCircle2 } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
+import ProfileSimilarityScore from '@/components/ProfileSimilarityScore';
 
 type Profile = {
   id: string;
@@ -189,6 +190,13 @@ const EventDetails = () => {
           </div>
         </CardContent>
       </Card>
+      
+      {/* Add the similarity score component if user has a profile */}
+      {userHasProfile && userId && eventId && (
+        <div className="mb-8">
+          <ProfileSimilarityScore userId={userId} eventId={eventId} />
+        </div>
+      )}
       
       <div className="space-y-6">
         <h2 className="text-xl font-semibold">Event Participants ({profiles.length})</h2>

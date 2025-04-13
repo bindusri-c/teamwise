@@ -30,7 +30,7 @@ interface RequestBody {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
 const geminiApiKey = Deno.env.get('GEMINI_API_KEY') as string
-const geminiApiEndpoint = Deno.env.get('GEMINI_API_ENDPOINT') || 'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent'
+const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent'
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -138,10 +138,10 @@ Deno.serve(async (req) => {
     // Generate embedding using Gemini API
     const embedding = await generateEmbedding(textForEmbedding)
     
-    // Store the embedding in the database
+    // Store the embedding as a JSON string in the database
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ embedding: embedding })
+      .update({ embedding: JSON.stringify(embedding) })
       .eq('id', userId)
       .eq('event_id', eventId)
 
@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
       }
     )
   } catch (error) {
-    console.error('Error in generate-embedding function:', error)
+    console.error('Error in generate-embedding function:', error.message || error)
     
     return new Response(
       JSON.stringify({ error: error.message || 'Unknown error' }),

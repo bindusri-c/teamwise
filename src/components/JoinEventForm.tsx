@@ -43,20 +43,27 @@ const JoinEventForm = () => {
         throw eventError;
       }
 
+      if (!eventData) {
+        throw new Error('Event not found. Please check the code and try again.');
+      }
+
       const currentUser = (await supabase.auth.getUser()).data.user;
       
+      if (!currentUser) {
+        throw new Error('You must be logged in to join an event.');
+      }
+      
       // Now join the event
-      const { data, error } = await supabase
+      const { error: participantError } = await supabase
         .from('participants')
         .insert({
           event_id: eventData.id,
-          user_id: currentUser?.id
-        })
-        .select();
+          user_id: currentUser.id
+        });
 
-      if (error) {
+      if (participantError) {
         // Check if the error is due to user already being a participant
-        if (error.code === '23505') { // Unique violation
+        if (participantError.code === '23505') { // Unique violation
           toast({
             title: "Info",
             description: `You have already joined the event "${eventData.name}"`,
@@ -65,7 +72,7 @@ const JoinEventForm = () => {
           navigate(`/event/${eventData.id}`);
           return;
         }
-        throw error;
+        throw participantError;
       }
 
       toast({
