@@ -29,6 +29,9 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
   const [isLoading, setIsLoading] = useState(false);
   
   useEffect(() => {
+    console.log('ParticipantsList mounted with eventId:', eventId);
+    console.log('Initial profiles passed to ParticipantsList:', initialProfiles);
+    
     // Always fetch profiles when component mounts to ensure we have the latest data
     if (eventId) {
       fetchProfiles();
@@ -36,28 +39,31 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
   }, [eventId]);
   
   const fetchProfiles = async () => {
-    if (!eventId) return;
+    if (!eventId) {
+      console.log('No eventId provided to ParticipantsList, cannot fetch profiles');
+      return;
+    }
     
     setIsLoading(true);
     try {
-      console.log('Fetching profiles for event:', eventId);
+      console.log('ParticipantsList: Fetching profiles for event:', eventId);
       
       // First get all participants for this event
-      console.log('Querying participants table for event_id:', eventId);
+      console.log('ParticipantsList: Querying participants table for event_id:', eventId);
       const { data: participantsData, error: participantsError } = await supabase
         .from('participants')
         .select('user_id')
         .eq('event_id', eventId);
         
       if (participantsError) {
-        console.error('Error fetching participants:', participantsError);
+        console.error('ParticipantsList: Error fetching participants:', participantsError);
         return;
       }
       
-      console.log('Found participants:', participantsData?.length, participantsData);
+      console.log('ParticipantsList: Found participants:', participantsData?.length, participantsData);
       
       if (!participantsData || participantsData.length === 0) {
-        console.log('No participants found for event');
+        console.log('ParticipantsList: No participants found for event');
         setProfiles([]);
         setIsLoading(false);
         return;
@@ -65,26 +71,26 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
       
       // Get the user IDs from participants
       const userIds = participantsData.map(p => p.user_id);
-      console.log('Extracted user IDs:', userIds);
+      console.log('ParticipantsList: Extracted user IDs:', userIds);
       
       // Then fetch profiles for those users
-      console.log('Querying profiles table for users:', userIds);
+      console.log('ParticipantsList: Querying profiles table for users:', userIds);
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for')
         .in('id', userIds);
         
       if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
+        console.error('ParticipantsList: Error fetching profiles:', profilesError);
         return;
       }
       
-      console.log('Profiles fetched:', profilesData?.length, profilesData);
+      console.log('ParticipantsList: Profiles fetched:', profilesData?.length, profilesData);
       
       if (profilesData) {
         // Additional logging for each profile
         profilesData.forEach(profile => {
-          console.log(`Profile ${profile.id} details:`, {
+          console.log(`ParticipantsList: Profile ${profile.id} details:`, {
             name: profile.name,
             email: profile.email,
             hasSkills: profile.skills?.length > 0
@@ -93,17 +99,17 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
         
         setProfiles(profilesData);
       } else {
-        console.log('No profiles data returned from query');
+        console.log('ParticipantsList: No profiles data returned from query');
       }
     } catch (error) {
-      console.error('Error in fetching profiles:', error);
+      console.error('ParticipantsList: Error in fetching profiles:', error);
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Filter out the current user from the participants list only if we want to hide current user
-  const filteredProfiles = profiles.filter(profile => profile.id !== userId);
+  // Don't filter out the current user - show all participants including the current user
+  // This change ensures that if the current user is a participant, they will be shown in the list
   
   if (isLoading) {
     return (
@@ -120,17 +126,17 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
   
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Event Participants ({filteredProfiles.length})</h2>
+      <h2 className="text-xl font-semibold">Event Participants ({profiles.length})</h2>
       
-      {filteredProfiles.length === 0 ? (
+      {profiles.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-muted-foreground">No other participants have registered for this event yet.</p>
+            <p className="text-muted-foreground">No participants have registered for this event yet.</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProfiles.map((profile) => (
+          {profiles.map((profile) => (
             <ParticipantCard key={profile.id} profile={profile} />
           ))}
         </div>

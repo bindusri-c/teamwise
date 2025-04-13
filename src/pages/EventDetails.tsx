@@ -123,12 +123,12 @@ const EventDetails = () => {
         }
 
         // Check if the user has a profile for this event
-        console.log('Checking if user has a profile for this event');
+        // We're specifically NOT doing event_id filtering here to find ANY profile for the user
+        console.log('Checking if user has a profile');
         const { data: existingProfile, error: profileCheckError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
-          .eq('event_id', eventId)
           .maybeSingle();
         
         if (profileCheckError) {
@@ -141,6 +141,10 @@ const EventDetails = () => {
         if (!existingProfile) {
           console.log('No profile exists for current user. Creating one now.');
           await createUserProfile(userId, eventId);
+        } else {
+          console.log('User already has a profile. Ensuring embedding is generated.');
+          // Even if the profile exists, make sure embedding is generated
+          await generateProfileEmbedding(userId, eventId);
         }
       } else {
         console.log('No userId available, skipping creator check and profile creation');
@@ -231,7 +235,7 @@ const EventDetails = () => {
         return;
       }
       
-      // Try to find a profile from another event
+      // Try to find a profile from another event - we're not filtering by event_id here
       const { data: otherProfile, error: otherProfileError } = await supabase
         .from('profiles')
         .select('*')
@@ -240,23 +244,26 @@ const EventDetails = () => {
         .maybeSingle();
       
       if (otherProfileError) {
-        console.error('Error fetching profile from other events:', otherProfileError);
+        console.error('Error fetching profile:', otherProfileError);
       }
       
-      // Create a profile using existing data or minimal data if nothing exists
+      // If profile already exists, don't try to create a new one
+      if (otherProfile) {
+        console.log('Profile already exists for user:', otherProfile);
+        // Generate embedding for the existing profile
+        console.log('Generating embedding for existing profile');
+        const embedResult = await generateProfileEmbedding(userId, eventId);
+        console.log('Profile embedding generation result:', embedResult);
+        return;
+      }
+      
+      // Create a profile using minimal data
       const newProfile = {
         id: userId,
-        event_id: eventId,
         email: userData?.user?.email || '',
-        name: otherProfile?.name || userData?.user?.email?.split('@')[0] || 'User',
-        // Copy other fields from the existing profile if available
-        age: otherProfile?.age || null,
-        gender: otherProfile?.gender || null,
-        hobbies: otherProfile?.hobbies || null,
-        skills: otherProfile?.skills || [],
-        interests: otherProfile?.interests || [],
-        about_you: otherProfile?.about_you || null,
-        linkedin_url: otherProfile?.linkedin_url || null
+        name: userData?.user?.email?.split('@')[0] || 'User',
+        skills: [] as string[],
+        interests: [] as string[]
       };
       
       console.log('Creating new profile:', newProfile);
