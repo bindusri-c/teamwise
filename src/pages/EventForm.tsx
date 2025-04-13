@@ -1,31 +1,27 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { LoaderCircle, Upload, User, Mail, Calendar, Users, Gift, FileText, Files, Info, Search, Image } from 'lucide-react';
-import { Tables } from '@/integrations/supabase/types';
-import DashboardHeader from '@/components/DashboardHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
+import { Loader2, Upload } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
 
 const EventForm = () => {
   const { eventId } = useParams<{ eventId: string }>();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(true);
-  const [event, setEvent] = useState<Tables<'events'> | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
   const [formData, setFormData] = useState<EventFormData>({
     name: '',
-    email: user?.email || '',
+    email: '',
     age: '',
     gender: '',
     hobbies: '',
@@ -37,551 +33,641 @@ const EventForm = () => {
     skills: [],
     interests: []
   });
-  const [resumePreview, setResumePreview] = useState<string>('');
-  const [imagePreview, setImagePreview] = useState<string>('');
-  const [fileNames, setFileNames] = useState<string[]>([]);
-  const [selectedSkills, setSelectedSkills] = useState<{ [key: string]: boolean }>({
-    'Programming': false,
-    'Marketing': false,
-    'Design': false,
-    'Sales': false,
-    'Finance': false,
-    'Operations': false,
-    'HR': false,
-    'Other': false,
-  });
-  const [selectedInterests, setSelectedInterests] = useState<{ [key: string]: boolean }>({
-    'AI': false,
-    'Blockchain': false,
-    'Mobile': false,
-    'Web': false,
-    'Data Science': false,
-    'UX/UI': false,
-    'Business': false,
-    'Other': false,
-  });
-
-  useEffect(() => {
-    if (!eventId) {
-      navigate('/dashboard');
-      return;
-    }
-
-    const fetchEvent = async () => {
-      setIsLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('events')
-          .select('*')
-          .eq('id', eventId)
-          .single();
-
-        if (error) throw error;
-        setEvent(data);
-      } catch (error: any) {
-        console.error('Error fetching event:', error);
-        toast({
-          title: "Error",
-          description: "Could not find event details. Please try again.",
-          variant: "destructive",
-        });
-        navigate('/dashboard');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchEvent();
-  }, [eventId, navigate, toast]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  
+  const [resumeFileName, setResumeFileName] = useState<string>('');
+  const [imageFileName, setImageFileName] = useState<string>('');
+  const [additionalFileNames, setAdditionalFileNames] = useState<string[]>([]);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleGenderChange = (value: string) => {
-    setFormData(prev => ({ ...prev, gender: value as 'male' | 'female' }));
+  const handleRadioChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, gender: value }));
   };
-
-  const handleSkillChange = (skill: string, checked: boolean) => {
-    setSelectedSkills(prev => ({ ...prev, [skill]: checked }));
-    
-    setFormData(prev => {
-      const newSkills = checked 
-        ? [...prev.skills, skill] 
-        : prev.skills.filter(s => s !== skill);
-      return { ...prev, skills: newSkills };
-    });
+  
+  const handleTagInputChange = (e: React.KeyboardEvent<HTMLInputElement>, field: 'skills' | 'interests') => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const value = (e.target as HTMLInputElement).value.trim();
+      if (value) {
+        setFormData((prev) => ({
+          ...prev,
+          [field]: [...prev[field], value]
+        }));
+        (e.target as HTMLInputElement).value = '';
+      }
+    }
   };
-
-  const handleInterestChange = (interest: string, checked: boolean) => {
-    setSelectedInterests(prev => ({ ...prev, [interest]: checked }));
-    
-    setFormData(prev => {
-      const newInterests = checked 
-        ? [...prev.interests, interest] 
-        : prev.interests.filter(i => i !== interest);
-      return { ...prev, interests: newInterests };
-    });
+  
+  const removeTag = (index: number, field: 'skills' | 'interests') => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index)
+    }));
   };
 
   const handleResumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      
-      // Check if file type is allowed (PDF or DOCX)
-      const fileType = file.type;
-      if (fileType !== 'application/pdf' && 
-          fileType !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        toast({
-          title: "Invalid file type",
-          description: "Please upload a PDF or DOCX file for your resume",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setFormData(prev => ({ ...prev, resume: file }));
-      setResumePreview(file.name);
-
-      // Here we could add logic to extract data from resume for autofill
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check file type
+    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!validTypes.includes(file.type)) {
       toast({
-        title: "Resume uploaded",
-        description: "Your resume has been uploaded successfully.",
+        title: "Invalid file type",
+        description: "Only PDF and DOCX files are allowed for resume",
+        variant: "destructive"
       });
+      e.target.value = '';
+      return;
     }
+    
+    // Check file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 5MB",
+        variant: "destructive"
+      });
+      e.target.value = '';
+      return;
+    }
+    
+    setFormData((prev) => ({ ...prev, resume: file }));
+    setResumeFileName(file.name);
   };
 
   const handleAdditionalFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const filesArray = Array.from(e.target.files);
-      
-      // Check each file
-      const validFiles = filesArray.filter(file => {
-        // File type check
-        const fileType = file.type;
-        const validType = fileType === 'application/pdf' || 
-                         fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        
-        // File size check (5MB = 5 * 1024 * 1024 bytes)
-        const validSize = file.size <= 5 * 1024 * 1024;
-        
-        if (!validType) {
-          toast({
-            title: "Invalid file type",
-            description: `${file.name} is not a PDF or DOCX file`,
-            variant: "destructive",
-          });
-        }
-        
-        if (!validSize) {
-          toast({
-            title: "File too large",
-            description: `${file.name} exceeds the 5MB limit`,
-            variant: "destructive",
-          });
-        }
-        
-        return validType && validSize;
-      });
-      
-      // Update state with valid files
-      setFormData(prev => ({ 
-        ...prev, 
-        additionalFiles: [...prev.additionalFiles, ...validFiles]
-      }));
-      
-      // Update file names for display
-      setFileNames(prev => [
-        ...prev,
-        ...validFiles.map(file => file.name)
-      ]);
-    }
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      
-      // Check if file is an image
-      if (!file.type.startsWith('image/')) {
+    const files = e.target.files;
+    if (!files) return;
+    
+    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const validFiles: File[] = [];
+    const validFileNames: string[] = [];
+    
+    Array.from(files).forEach(file => {
+      if (!validTypes.includes(file.type)) {
         toast({
           title: "Invalid file type",
-          description: "Please upload an image file",
-          variant: "destructive",
+          description: `${file.name}: Only PDF and DOCX files are allowed`,
+          variant: "destructive"
         });
         return;
       }
       
-      setFormData(prev => ({ ...prev, image: file }));
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: `${file.name}: Maximum file size is 5MB`,
+          variant: "destructive"
+        });
+        return;
+      }
       
-      // Create preview URL
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setImagePreview(event.target.result as string);
+      validFiles.push(file);
+      validFileNames.push(file.name);
+    });
+    
+    if (validFiles.length > 0) {
+      setFormData((prev) => ({ ...prev, additionalFiles: [...prev.additionalFiles, ...validFiles] }));
+      setAdditionalFileNames((prev) => [...prev, ...validFileNames]);
+    }
+    
+    // Reset the input
+    e.target.value = '';
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Only JPEG, PNG and GIF files are allowed for images",
+        variant: "destructive"
+      });
+      e.target.value = '';
+      return;
+    }
+    
+    // Check file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 5MB",
+        variant: "destructive"
+      });
+      e.target.value = '';
+      return;
+    }
+    
+    setFormData((prev) => ({ ...prev, image: file }));
+    setImageFileName(file.name);
+  };
+
+  const parseResume = async () => {
+    const file = formData.resume;
+    if (!file) {
+      toast({
+        title: "No resume uploaded",
+        description: "Please upload a resume first",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsParsing(true);
+    
+    try {
+      // For PDF files
+      if (file.type === 'application/pdf') {
+        // Load PDF.js if not loaded
+        if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
         }
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        
+        let fullText = '';
+        
+        // Extract text from each page
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          fullText += pageText + ' ';
+        }
+        
+        // Very basic parsing - this would be more sophisticated in a real app
+        const extractedData = {
+          name: extractField(fullText, /name:?\s*([A-Za-z\s]+)/i) || '',
+          email: extractEmail(fullText) || '',
+          skills: extractSkills(fullText),
+          interests: extractInterests(fullText),
+          aboutYou: extractParagraph(fullText, 100)
+        };
+        
+        setFormData(prev => ({
+          ...prev,
+          name: extractedData.name || prev.name,
+          email: extractedData.email || prev.email,
+          skills: [...new Set([...prev.skills, ...extractedData.skills])],
+          interests: [...new Set([...prev.interests, ...extractedData.interests])],
+          aboutYou: extractedData.aboutYou || prev.aboutYou
+        }));
+        
+        toast({
+          title: "Resume parsed",
+          description: "Resume data has been extracted and filled in the form"
+        });
+      } else {
+        // For DOCX files - in a real app you would use a library like mammoth.js
+        toast({
+          title: "DOCX parsing not implemented",
+          description: "DOCX parsing is not implemented in this demo"
+        });
+      }
+    } catch (error) {
+      console.error("Error parsing resume:", error);
+      toast({
+        title: "Error parsing resume",
+        description: "There was an error parsing your resume",
+        variant: "destructive"
+      });
+    } finally {
+      setIsParsing(false);
+    }
+  };
+  
+  // Simple extraction helpers
+  const extractField = (text: string, regex: RegExp): string | null => {
+    const match = text.match(regex);
+    return match ? match[1].trim() : null;
+  };
+  
+  const extractEmail = (text: string): string | null => {
+    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+    const match = text.match(emailRegex);
+    return match ? match[0] : null;
+  };
+  
+  const extractSkills = (text: string): string[] => {
+    // This is a very simple implementation
+    const skillKeywords = ['javascript', 'python', 'react', 'node', 'html', 'css', 'sql', 'java', 'c++', 'leadership', 'management'];
+    return skillKeywords.filter(skill => 
+      new RegExp(`\\b${skill}\\b`, 'i').test(text)
+    );
+  };
+  
+  const extractInterests = (text: string): string[] => {
+    // Simple implementation
+    const interestKeywords = ['travel', 'music', 'sports', 'reading', 'photography', 'cooking', 'gaming', 'hiking'];
+    return interestKeywords.filter(interest => 
+      new RegExp(`\\b${interest}\\b`, 'i').test(text)
+    );
+  };
+  
+  const extractParagraph = (text: string, maxWords: number): string => {
+    const words = text.split(/\s+/).slice(0, maxWords);
+    return words.join(' ');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!eventId) {
+      toast({
+        title: "Error",
+        description: "Event ID is missing",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Upload files to Supabase storage
+      const user = (await supabase.auth.getUser()).data.user;
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      
+      // Upload profile image if exists
+      let imageUrl = '';
+      if (formData.image) {
+        const { data: imageData, error: imageError } = await supabase.storage
+          .from('profiles')
+          .upload(`${user.id}/${Date.now()}_${formData.image.name}`, formData.image);
+        
+        if (imageError) throw imageError;
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('profiles')
+          .getPublicUrl(imageData.path);
+          
+        imageUrl = publicUrl;
+      }
+      
+      // Upload resume if exists
+      let resumeUrl = '';
+      if (formData.resume) {
+        const { data: resumeData, error: resumeError } = await supabase.storage
+          .from('resumes')
+          .upload(`${user.id}/${Date.now()}_${formData.resume.name}`, formData.resume);
+        
+        if (resumeError) throw resumeError;
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('resumes')
+          .getPublicUrl(resumeData.path);
+          
+        resumeUrl = publicUrl;
+      }
+      
+      // Upload additional files if any
+      const additionalFilesUrls: string[] = [];
+      for (const file of formData.additionalFiles) {
+        const { data: fileData, error: fileError } = await supabase.storage
+          .from('additional_files')
+          .upload(`${user.id}/${Date.now()}_${file.name}`, file);
+        
+        if (fileError) throw fileError;
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('additional_files')
+          .getPublicUrl(fileData.path);
+          
+        additionalFilesUrls.push(publicUrl);
+      }
+      
+      // Prepare form data for API call
+      const submissionData = {
+        ...formData,
+        imageUrl,
+        resumeUrl,
+        additionalFiles: additionalFilesUrls,
+        linkedinUrl: ''  // Default empty
       };
-      reader.readAsDataURL(file);
+      
+      // Call the edge function to generate embeddings and store profile
+      const { data: responseData, error: responseError } = await supabase.functions
+        .invoke('generate-embedding', {
+          body: { 
+            formData: submissionData,
+            eventId
+          }
+        });
+      
+      if (responseError) throw responseError;
+      
+      toast({
+        title: "Success",
+        description: "Your profile has been submitted successfully"
+      });
+      
+      // Navigate to dashboard
+      navigate('/dashboard');
+      
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "There was an error submitting your form",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleRemoveFile = (index: number) => {
-    setFormData(prev => {
-      const newFiles = [...prev.additionalFiles];
-      newFiles.splice(index, 1);
-      return { ...prev, additionalFiles: newFiles };
-    });
-    
-    setFileNames(prev => {
-      const newNames = [...prev];
-      newNames.splice(index, 1);
-      return newNames;
-    });
-  };
-
-  const handleAutoFill = () => {
-    // This would normally parse the resume and extract data
-    // For this demo, we'll just show a toast notification
-    toast({
-      title: "Autofill feature",
-      description: "In a production app, this would parse your resume to extract your information.",
-    });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // We'll implement the submit logic later as mentioned by the user
-    console.log('Form submitted:', formData);
-    toast({
-      title: "Form Submitted",
-      description: "Your information has been saved (demo only).",
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <DashboardHeader />
-        <div className="flex-1 flex items-center justify-center">
-          <LoaderCircle className="h-12 w-12 animate-spin text-rag-primary" />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <DashboardHeader />
-      
-      <main className="flex-1 container py-8 px-4 md:px-6">
-        <div className="max-w-3xl mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">Join {event?.name}</CardTitle>
-              <CardDescription>
-                Please fill out your details to complete your registration for this event
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Name Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="name" className="flex items-center gap-2">
-                        <User className="h-4 w-4" /> Name
-                      </Label>
-                      <Input
-                        id="name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        placeholder="Your full name"
-                        required
-                      />
-                    </div>
-                    
-                    {/* Email Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="flex items-center gap-2">
-                        <Mail className="h-4 w-4" /> Email
-                      </Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        placeholder="Your email address"
-                        required
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Age Field */}
-                    <div className="space-y-2">
-                      <Label htmlFor="age" className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" /> Age
-                      </Label>
-                      <Input
-                        id="age"
-                        name="age"
-                        type="number"
-                        value={formData.age}
-                        onChange={handleInputChange}
-                        placeholder="Your age"
-                        min={18}
-                        max={120}
-                      />
-                    </div>
-                    
-                    {/* Gender Field */}
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <Users className="h-4 w-4" /> Gender
-                      </Label>
-                      <RadioGroup 
-                        value={formData.gender} 
-                        onValueChange={handleGenderChange}
-                        className="flex space-x-4"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="male" id="male" />
-                          <Label htmlFor="male">Male</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="female" id="female" />
-                          <Label htmlFor="female">Female</Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-                  </div>
-                  
-                  {/* Hobbies Field */}
-                  <div className="space-y-2">
-                    <Label htmlFor="hobbies" className="flex items-center gap-2">
-                      <Gift className="h-4 w-4" /> Hobbies
-                    </Label>
-                    <Input
-                      id="hobbies"
-                      name="hobbies"
-                      value={formData.hobbies}
-                      onChange={handleInputChange}
-                      placeholder="Your hobbies (e.g., reading, hiking, cooking)"
-                    />
-                  </div>
-                  
-                  {/* Resume Upload */}
-                  <div className="space-y-2">
-                    <Label htmlFor="resume" className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" /> Resume (PDF or DOCX)
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="resume"
-                        name="resume"
-                        type="file"
-                        onChange={handleResumeChange}
-                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        className="hidden"
-                      />
-                      <Button 
-                        type="button" 
-                        variant="outline"
-                        onClick={() => document.getElementById('resume')?.click()}
-                        className="flex-1"
-                      >
-                        <Upload className="mr-2 h-4 w-4" />
-                        Upload Resume
-                      </Button>
-                      <Button 
-                        type="button" 
-                        variant="secondary"
-                        onClick={handleAutoFill}
-                        disabled={!formData.resume}
-                      >
-                        Autofill from Resume
-                      </Button>
-                    </div>
-                    {resumePreview && (
-                      <p className="text-sm text-muted-foreground">
-                        Uploaded: {resumePreview}
-                      </p>
-                    )}
-                  </div>
-                  
-                  {/* Additional Files */}
-                  <div className="space-y-2">
-                    <Label htmlFor="additionalFiles" className="flex items-center gap-2">
-                      <Files className="h-4 w-4" /> Additional Files (PDF or DOCX, max 5MB each)
-                    </Label>
-                    <Input
-                      id="additionalFiles"
-                      name="additionalFiles"
-                      type="file"
-                      onChange={handleAdditionalFilesChange}
-                      accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      multiple
-                      className="hidden"
-                    />
-                    <Button 
-                      type="button" 
-                      variant="outline"
-                      onClick={() => document.getElementById('additionalFiles')?.click()}
-                      className="w-full"
-                    >
-                      <Upload className="mr-2 h-4 w-4" />
-                      Upload Additional Files
-                    </Button>
-                    {fileNames.length > 0 && (
-                      <ul className="mt-2 space-y-1">
-                        {fileNames.map((name, index) => (
-                          <li key={index} className="flex items-center justify-between text-sm bg-gray-50 p-2 rounded">
-                            <span className="truncate max-w-[90%]">{name}</span>
-                            <Button 
-                              type="button" 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleRemoveFile(index)}
-                              className="h-6 w-6 p-0"
-                            >
-                              ×
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  
-                  {/* About You */}
-                  <div className="space-y-2">
-                    <Label htmlFor="aboutYou" className="flex items-center gap-2">
-                      <Info className="h-4 w-4" /> About You
-                    </Label>
-                    <Textarea
-                      id="aboutYou"
-                      name="aboutYou"
-                      value={formData.aboutYou}
-                      onChange={handleInputChange}
-                      placeholder="Share a little about yourself, your background, and experiences"
-                      rows={4}
-                    />
-                  </div>
-                  
-                  {/* Looking For */}
-                  <div className="space-y-2">
-                    <Label htmlFor="lookingFor" className="flex items-center gap-2">
-                      <Search className="h-4 w-4" /> Who You're Looking to Meet
-                    </Label>
-                    <Textarea
-                      id="lookingFor"
-                      name="lookingFor"
-                      value={formData.lookingFor}
-                      onChange={handleInputChange}
-                      placeholder="Describe the type of people you'd like to connect with at this event"
-                      rows={3}
-                    />
-                  </div>
-                  
-                  {/* Profile Image */}
-                  <div className="space-y-2">
-                    <Label htmlFor="image" className="flex items-center gap-2">
-                      <Image className="h-4 w-4" /> Profile Image
-                    </Label>
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <Input
-                          id="image"
-                          name="image"
-                          type="file"
-                          onChange={handleImageChange}
-                          accept="image/*"
-                          className="hidden"
-                        />
-                        <Button 
-                          type="button" 
-                          variant="outline"
-                          onClick={() => document.getElementById('image')?.click()}
-                          className="w-full"
-                        >
-                          <Upload className="mr-2 h-4 w-4" />
-                          Upload Image
-                        </Button>
-                      </div>
-                      {imagePreview && (
-                        <div className="w-16 h-16 rounded-full overflow-hidden border">
-                          <img 
-                            src={imagePreview} 
-                            alt="Profile Preview" 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Skills & Interests */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Skills */}
-                    <div className="space-y-3">
-                      <Label className="text-base">Skills</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Object.keys(selectedSkills).map((skill) => (
-                          <div key={skill} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`skill-${skill}`} 
-                              checked={selectedSkills[skill]}
-                              onCheckedChange={(checked) => 
-                                handleSkillChange(skill, checked as boolean)
-                              }
-                            />
-                            <Label 
-                              htmlFor={`skill-${skill}`}
-                              className="text-sm font-normal"
-                            >
-                              {skill}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Interests */}
-                    <div className="space-y-3">
-                      <Label className="text-base">Interests</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Object.keys(selectedInterests).map((interest) => (
-                          <div key={interest} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`interest-${interest}`} 
-                              checked={selectedInterests[interest]}
-                              onCheckedChange={(checked) => 
-                                handleInterestChange(interest, checked as boolean)
-                              }
-                            />
-                            <Label 
-                              htmlFor={`interest-${interest}`}
-                              className="text-sm font-normal"
-                            >
-                              {interest}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+    <div className="container py-8 mx-auto">
+      <Card className="max-w-4xl mx-auto">
+        <CardHeader>
+          <CardTitle>Event Registration</CardTitle>
+          <CardDescription>Please fill out the form below to complete your registration</CardDescription>
+        </CardHeader>
+        
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input 
+                    id="name" 
+                    name="name" 
+                    value={formData.name} 
+                    onChange={handleChange} 
+                    required 
+                  />
                 </div>
                 
-                <Button type="submit" className="w-full">
-                  Submit Registration
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input 
+                    id="email" 
+                    name="email" 
+                    type="email" 
+                    value={formData.email} 
+                    onChange={handleChange} 
+                    required 
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="age">Age</Label>
+                  <Input 
+                    id="age" 
+                    name="age" 
+                    type="number" 
+                    min="18" 
+                    max="120" 
+                    value={formData.age} 
+                    onChange={handleChange} 
+                    required 
+                  />
+                </div>
+                
+                <div>
+                  <Label>Gender</Label>
+                  <RadioGroup value={formData.gender} onValueChange={handleRadioChange} className="mt-2">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="male" id="male" />
+                      <Label htmlFor="male">Male</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="female" id="female" />
+                      <Label htmlFor="female">Female</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+                
+                <div>
+                  <Label htmlFor="hobbies">Hobbies</Label>
+                  <Input 
+                    id="hobbies" 
+                    name="hobbies" 
+                    value={formData.hobbies} 
+                    onChange={handleChange} 
+                  />
+                </div>
+              </div>
+              
+              {/* Files and Tags */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="profile-picture">Profile Picture</Label>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => imageInputRef.current?.click()}
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Image
+                    </Button>
+                    {imageFileName && <span className="text-sm">{imageFileName}</span>}
+                  </div>
+                  <input 
+                    ref={imageInputRef}
+                    id="profile-picture" 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleImageChange} 
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label htmlFor="resume">Resume (PDF/DOCX)</Label>
+                    {formData.resume && (
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={parseResume}
+                        disabled={isParsing}
+                      >
+                        {isParsing ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Parsing...
+                          </>
+                        ) : (
+                          "Autofill from Resume"
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => resumeInputRef.current?.click()}
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Resume
+                    </Button>
+                    {resumeFileName && <span className="text-sm">{resumeFileName}</span>}
+                  </div>
+                  <input 
+                    ref={resumeInputRef}
+                    id="resume" 
+                    type="file" 
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                    className="hidden" 
+                    onChange={handleResumeChange} 
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="additional-files">Additional Files (PDF/DOCX, max 5MB each)</Label>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Files
+                    </Button>
+                  </div>
+                  <input 
+                    ref={fileInputRef}
+                    id="additional-files" 
+                    type="file" 
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                    className="hidden" 
+                    multiple 
+                    onChange={handleAdditionalFilesChange} 
+                  />
+                  {additionalFileNames.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm font-medium">Uploaded files:</p>
+                      <ul className="text-sm list-disc list-inside">
+                        {additionalFileNames.map((name, index) => (
+                          <li key={index}>{name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* Skills and Interests */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="skills-input">Skills (press Enter after each)</Label>
+                <Input 
+                  id="skills-input" 
+                  placeholder="Add a skill and press Enter" 
+                  onKeyDown={(e) => handleTagInputChange(e, 'skills')} 
+                />
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.skills.map((skill, index) => (
+                    <div key={index} className="bg-secondary px-3 py-1 rounded-full flex items-center text-sm">
+                      {skill}
+                      <button 
+                        type="button" 
+                        className="ml-2 text-secondary-foreground/70 hover:text-secondary-foreground"
+                        onClick={() => removeTag(index, 'skills')}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="interests-input">Interests (press Enter after each)</Label>
+                <Input 
+                  id="interests-input" 
+                  placeholder="Add an interest and press Enter" 
+                  onKeyDown={(e) => handleTagInputChange(e, 'interests')} 
+                />
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.interests.map((interest, index) => (
+                    <div key={index} className="bg-secondary px-3 py-1 rounded-full flex items-center text-sm">
+                      {interest}
+                      <button 
+                        type="button" 
+                        className="ml-2 text-secondary-foreground/70 hover:text-secondary-foreground"
+                        onClick={() => removeTag(index, 'interests')}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            {/* About and Looking For */}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="aboutYou">About You</Label>
+                <Textarea 
+                  id="aboutYou" 
+                  name="aboutYou" 
+                  value={formData.aboutYou} 
+                  onChange={handleChange} 
+                  rows={4} 
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="lookingFor">Who are you looking to connect with?</Label>
+                <Textarea 
+                  id="lookingFor" 
+                  name="lookingFor" 
+                  value={formData.lookingFor} 
+                  onChange={handleChange} 
+                  rows={4} 
+                />
+              </div>
+            </div>
+          </CardContent>
+          
+          <CardFooter className="flex justify-between">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => navigate('/dashboard')}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit"
+              )}
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
     </div>
   );
 };
