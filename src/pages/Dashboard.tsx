@@ -2,6 +2,7 @@
 import DashboardHeader from '@/components/DashboardHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
+import EdgeFunctionDemo from '@/components/EdgeFunctionDemo';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -52,6 +53,11 @@ const Dashboard = () => {
               <p>Chat features coming soon!</p>
             </CardContent>
           </Card>
+        </div>
+        
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold mb-4">Edge Function Demo</h2>
+          <EdgeFunctionDemo />
         </div>
       </main>
       
