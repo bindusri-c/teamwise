@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { joinEvent } from '@/integrations/supabase/client';
+import { joinEvent, generateProfileEmbedding } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,6 +55,25 @@ const JoinEventForm = () => {
       }
 
       console.log("Successfully joined event:", event);
+      
+      // Explicitly generate the embedding after joining the event
+      if (event?.id) {
+        console.log("Generating embedding for user after joining event");
+        try {
+          const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
+          
+          if (embedSuccess) {
+            console.log("Successfully generated embedding after joining event");
+          } else {
+            console.error("Error generating embedding after joining event:", embedError);
+            // Continue anyway since we want the user to join the event even if embedding fails
+          }
+        } catch (embedError) {
+          console.error("Exception generating embedding after joining event:", embedError);
+          // Continue anyway since we want the user to join the event even if embedding fails
+        }
+      }
+      
       toast({
         title: "Success",
         description: `You have successfully joined the event "${event?.name}"`,
