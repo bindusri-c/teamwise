@@ -47,8 +47,45 @@ export const corsResponse = () => {
   })
 }
 
+// New function to extract text from PDF resume
+async function extractTextFromPDF(resumeUrl: string): Promise<string> {
+  try {
+    console.log(`Downloading resume from: ${resumeUrl}`);
+    
+    // Download the PDF file
+    const pdfResponse = await fetch(resumeUrl);
+    if (!pdfResponse.ok) {
+      console.error(`Failed to download PDF: ${pdfResponse.status} ${pdfResponse.statusText}`);
+      return "";
+    }
+    
+    // Get the PDF content as arrayBuffer
+    const pdfBuffer = await pdfResponse.arrayBuffer();
+    
+    // Use a simple text extraction approach for PDFs
+    // This is a basic extraction that works for text-based PDFs
+    // For more complex PDFs with images or non-text content, we would need a more sophisticated parser
+    const decoder = new TextDecoder("utf-8");
+    let text = decoder.decode(pdfBuffer);
+    
+    // Basic cleaning: remove non-printable characters and normalize whitespace
+    text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ")  // Keep only printable ASCII and whitespace
+               .replace(/\s+/g, " ")                 // Normalize whitespace
+               .trim();
+    
+    // Extract a reasonable amount of text (first 5000 characters)
+    const extractedText = text.substring(0, 5000);
+    
+    console.log(`Successfully extracted ${extractedText.length} characters from resume`);
+    return extractedText;
+  } catch (error) {
+    console.error(`Error extracting text from PDF: ${error.message}`);
+    return "";
+  }
+}
+
 // Enhanced function to create a text representation of the profile
-function createEmbeddingText(profile: Profile): string {
+async function createEmbeddingText(profile: Profile): Promise<string> {
   // Build a structured profile summary with weighted importance
   // Start with most important identity information
   let profileText = '';
@@ -93,6 +130,16 @@ function createEmbeddingText(profile: Profile): string {
   
   // PROFESSIONAL LINKS - Less critical but indicates professional presence
   if (profile.linkedin_url) profileText += `LinkedIn: ${profile.linkedin_url}. `;
+  
+  // NEW: Try to extract and add resume content if available
+  if (profile.resume_url) {
+    console.log(`Extracting resume content from ${profile.resume_url}`);
+    const resumeText = await extractTextFromPDF(profile.resume_url);
+    if (resumeText) {
+      profileText += `Resume content: ${resumeText}. `;
+      console.log(`Added ${resumeText.length} characters of resume content to embedding text`);
+    }
+  }
   
   console.log(`Created profile text with length: ${profileText.length} characters`);
   return profileText.trim();
@@ -165,8 +212,8 @@ Deno.serve(async (req) => {
 
     console.log(`Processing profile embedding for user: ${userId}, event: ${eventId}`)
 
-    // Create text representation for embedding
-    const textForEmbedding = createEmbeddingText(profileData)
+    // Create text representation for embedding (now with resume content)
+    const textForEmbedding = await createEmbeddingText(profileData)
     
     // Generate embedding using Gemini API
     const embedding = await generateEmbedding(textForEmbedding)

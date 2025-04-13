@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import ProfileSimilarityScore from '@/components/ProfileSimilarityScore';
 import EventHeader from '@/components/event/EventHeader';
@@ -22,6 +21,7 @@ type Profile = {
   linkedin_url: string | null;
   about_you: string | null;
   looking_for: string | null;
+  resume_url: string | null;
 };
 
 type ProfileWithSimilarity = Profile & {
@@ -38,6 +38,7 @@ const EventDetails = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreator, setIsCreator] = useState(false);
   const [loadingSimilarities, setLoadingSimilarities] = useState(false);
+  const [regeneratingEmbedding, setRegeneratingEmbedding] = useState(false);
 
   useEffect(() => {
     if (eventId) {
@@ -62,7 +63,7 @@ const EventDetails = () => {
 
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for')
+        .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for, resume_url')
         .eq('event_id', eventId);
         
       if (profilesError) throw profilesError;
@@ -143,6 +144,63 @@ const EventDetails = () => {
     }
   };
 
+  const regenerateEmbedding = async () => {
+    if (!userId || !eventId) return;
+    
+    setRegeneratingEmbedding(true);
+    try {
+      // Fetch the current user's profile for this event
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .eq('event_id', eventId)
+        .single();
+        
+      if (profileError) throw profileError;
+      
+      if (!profileData) {
+        toast({
+          title: "Profile not found",
+          description: "You need to register for this event first",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Call the edge function to regenerate embedding
+      const { error: embeddingError } = await supabase.functions
+        .invoke('generate-embedding', {
+          body: { 
+            userId,
+            eventId,
+            profileData
+          }
+        });
+      
+      if (embeddingError) throw embeddingError;
+      
+      toast({
+        title: "Success",
+        description: "Your profile embedding has been regenerated successfully. You can now recalculate similarities.",
+        duration: 5000,
+      });
+      
+      // Refresh the data
+      await fetchEventDetails();
+      
+    } catch (error: any) {
+      console.error('Error regenerating embedding:', error);
+      toast({
+        title: "Error",
+        description: "Failed to regenerate embedding. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRegeneratingEmbedding(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="container py-8 mx-auto">
@@ -195,7 +253,22 @@ const EventDetails = () => {
       
       {userHasProfile && userId && eventId && (
         <div className="mb-8">
-          <ProfileSimilarityScore userId={userId} eventId={eventId} />
+          <div className="flex items-center justify-between mb-4">
+            <ProfileSimilarityScore userId={userId} eventId={eventId} />
+            
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={regenerateEmbedding}
+              disabled={regeneratingEmbedding}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${regeneratingEmbedding ? 'animate-spin' : ''}`} />
+              {regeneratingEmbedding ? 'Regenerating...' : 'Regenerate My Embedding'}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Note: Your embedding now includes text from your uploaded resume for better matching.
+          </p>
         </div>
       )}
       
