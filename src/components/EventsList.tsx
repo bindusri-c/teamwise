@@ -12,6 +12,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 type Event = Tables<'events'> & {
   is_creator: boolean;
+  pinecone_index?: string; // Make pinecone_index optional since we'll calculate it
 };
 
 type Profile = {
@@ -156,6 +157,11 @@ const EventsList = () => {
       .slice(0, 2);
   };
 
+  // Calculate a Pinecone index name based on the event name
+  const getPineconeIndexName = (event: Event): string => {
+    return `evt-${event.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+  };
+
   const generateProfileEmbedding = async (eventId: string) => {
     if (!userId) {
       toast({
@@ -181,20 +187,29 @@ const EventsList = () => {
         throw new Error("Profile not found. Please complete your registration first.");
       }
 
-      // 2. Get the Pinecone index name from the event
+      // 2. Get the event to calculate the Pinecone index name
       const { data: event, error: eventError } = await supabase
         .from('events')
-        .select('pinecone_index')
+        .select('name')
         .eq('id', eventId)
         .single();
 
-      if (eventError || !event.pinecone_index) {
-        throw new Error("Event's Pinecone index not found. Please contact support.");
+      if (eventError) {
+        throw new Error("Event not found. Please contact support.");
       }
+
+      // 3. Calculate the Pinecone index name using the same function as create-pinecone-index
+      const pineconeIndex = getPineconeIndexName({...event, is_creator: false});
+      console.log(`Using Pinecone index: ${pineconeIndex} for event ${eventId}`);
 
       // 3. Call the generate-embedding function
       const { data, error } = await supabase.functions.invoke('generate-embedding', {
-        body: { userId, eventId, profileData: profile }
+        body: { 
+          userId, 
+          eventId, 
+          profileData: profile,
+          pineconeIndex: pineconeIndex 
+        }
       });
 
       if (error) {
@@ -255,9 +270,7 @@ const EventsList = () => {
               <div className="text-sm">
                 <p><strong>Event Code:</strong> {event.code}</p>
                 <p><strong>Created:</strong> {new Date(event.created_at).toLocaleDateString()}</p>
-                {event.pinecone_index && (
-                  <p><strong>Pinecone Index:</strong> {event.pinecone_index}</p>
-                )}
+                <p><strong>Pinecone Index:</strong> {getPineconeIndexName(event)}</p>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between flex-wrap gap-2">
