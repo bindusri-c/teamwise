@@ -94,6 +94,7 @@ const EventDetails = () => {
     try {
       console.log('Fetching similarity scores for profiles:', profilesData);
       
+      // Fetch all similarity scores where the current user is involved
       const { data: similarityData, error: similarityError } = await supabase
         .from('profile_similarities')
         .select('profile_id_1, profile_id_2, similarity_score')
@@ -104,20 +105,30 @@ const EventDetails = () => {
       
       console.log('Similarity data from database:', similarityData);
       
+      // Map the profiles with their similarity scores
       const profilesWithSimilarity = profilesData.map(profile => {
+        // If this is the current user, set similarity to 1.0 (100% match with self)
         if (profile.id === userId) {
           return { ...profile, similarity_score: 1.0 };
         }
         
+        // Find the similarity entry for this profile pair
         const similarityEntry = similarityData?.find(
           entry => 
             (entry.profile_id_1 === userId && entry.profile_id_2 === profile.id) ||
             (entry.profile_id_1 === profile.id && entry.profile_id_2 === userId)
         );
         
+        // Add the similarity score to the profile
+        const similarityScore = similarityEntry?.similarity_score !== undefined 
+          ? similarityEntry.similarity_score 
+          : undefined;
+          
+        console.log(`Similarity score for ${profile.name}:`, similarityScore);
+        
         return {
           ...profile,
-          similarity_score: similarityEntry?.similarity_score
+          similarity_score: similarityScore
         };
       });
       
