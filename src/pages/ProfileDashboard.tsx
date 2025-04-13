@@ -24,8 +24,6 @@ const ProfileDashboard = () => {
   const { userId } = useCurrentUser();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
   
   const [profileData, setProfileData] = useState({
     name: '',
@@ -239,47 +237,6 @@ const ProfileDashboard = () => {
         throw new Error(`Error saving profile: ${profileError.message}`);
       }
       
-      setIsGeneratingEmbedding(true);
-      
-      try {
-        const { error: embeddingError } = await supabase.functions.invoke('update-profile-embedding', {
-          body: {
-            profileData: {
-              name: profileData.name,
-              email: userData.user?.email,
-              age: profileData.age,
-              gender: profileData.gender,
-              hobbies: profileData.hobbies,
-              skills: profileData.skills,
-              interests: profileData.interests,
-              aboutYou: profileData.aboutYou,
-              linkedinUrl: profileData.linkedinUrl
-            },
-            userId
-          }
-        });
-        
-        if (embeddingError) {
-          console.error("Error generating embedding:", embeddingError);
-          toast({
-            title: "Warning",
-            description: "Profile saved, but there was an error updating embeddings for matching",
-            variant: "destructive"
-          });
-        } else {
-          console.log("Successfully generated and stored embedding");
-        }
-      } catch (embeddingError) {
-        console.error("Error calling update-profile-embedding function:", embeddingError);
-        toast({
-          title: "Warning",
-          description: "Profile saved, but there was an error updating embeddings for matching",
-          variant: "destructive"
-        });
-      } finally {
-        setIsGeneratingEmbedding(false);
-      }
-      
       toast({
         title: "Success",
         description: "Your profile has been updated successfully"
@@ -453,12 +410,12 @@ const ProfileDashboard = () => {
               </Button>
               <Button 
                 type="submit" 
-                disabled={isSaving || isGeneratingEmbedding}
+                disabled={isSaving}
               >
-                {isSaving || isGeneratingEmbedding ? (
+                {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {isGeneratingEmbedding ? "Processing..." : "Saving..."}
+                    Saving...
                   </>
                 ) : (
                   <>
