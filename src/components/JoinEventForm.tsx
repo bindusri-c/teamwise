@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -7,17 +7,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { LoaderCircle } from 'lucide-react';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const JoinEventForm = () => {
   const [eventCode, setEventCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     if (!eventCode.trim()) {
+      setError("Please enter an event code");
       toast({
         title: "Error",
         description: "Please enter an event code",
@@ -32,7 +36,6 @@ const JoinEventForm = () => {
       console.log("Attempting to join event with code:", eventCode);
       
       // First, query the events table with the provided code
-      // Use the proper syntax for the exact code match
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('*')
@@ -111,6 +114,7 @@ const JoinEventForm = () => {
       navigate(`/event/${event.id}`);
     } catch (error: any) {
       console.error('Error joining event:', error);
+      setError(error.message || "Failed to join event. Please try again.");
       toast({
         title: "Error",
         description: error.message || "Failed to join event. Please try again.",
@@ -123,6 +127,12 @@ const JoinEventForm = () => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
+        <Alert variant="destructive">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <div className="space-y-2">
         <Label htmlFor="eventCode">Event Code</Label>
         <Input
@@ -135,8 +145,11 @@ const JoinEventForm = () => {
           minLength={6}
           pattern="[0-9]{6}"
           title="Please enter a 6-digit code"
+          aria-invalid={error ? "true" : "false"}
+          aria-describedby={error ? "event-code-error" : undefined}
           required
         />
+        {error && <p id="event-code-error" className="text-sm text-destructive mt-1">{error}</p>}
       </div>
       <Button type="submit" disabled={isLoading} className="w-full">
         {isLoading ? (

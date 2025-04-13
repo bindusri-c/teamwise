@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -10,9 +9,19 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
-import { Loader2, Upload, ArrowLeft } from 'lucide-react';
+import { Loader2, Upload, ArrowLeft, AlertCircle } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { 
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription
+} from '@/components/ui/form';
 
 const EventForm = () => {
   const { eventId } = useParams<{ eventId: string }>();
@@ -38,6 +47,13 @@ const EventForm = () => {
     linkedinUrl: ''
   });
   
+  const [formErrors, setFormErrors] = useState<{
+    name?: string;
+    email?: string;
+    resume?: string;
+    image?: string;
+  }>({});
+  
   const [resumeFileName, setResumeFileName] = useState<string>('');
   const [imageFileName, setImageFileName] = useState<string>('');
   const [additionalFileNames, setAdditionalFileNames] = useState<string[]>([]);
@@ -49,6 +65,7 @@ const EventForm = () => {
   useEffect(() => {
     if (eventId) {
       fetchEventInfo();
+      fetchUserProfile();
     }
   }, [eventId]);
 
@@ -72,9 +89,58 @@ const EventForm = () => {
     }
   };
   
+  const fetchUserProfile = async () => {
+    if (!userId) return;
+    
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) throw userError;
+      
+      if (userData.user) {
+        setFormData(prev => ({
+          ...prev,
+          email: userData.user.email || '',
+        }));
+        
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        if (profileError) {
+          console.warn('Error fetching user profile:', profileError);
+          return;
+        }
+        
+        if (profileData) {
+          setFormData(prev => ({
+            ...prev,
+            name: profileData.name || prev.name,
+            age: profileData.age ? profileData.age.toString() : prev.age,
+            gender: profileData.gender || prev.gender,
+            hobbies: profileData.hobbies || prev.hobbies,
+            linkedinUrl: profileData.linkedin_url || prev.linkedinUrl,
+            skills: profileData.skills || prev.skills,
+            interests: profileData.interests || prev.interests,
+            aboutYou: profileData.about_you || prev.aboutYou,
+            lookingFor: profileData.looking_for || prev.lookingFor
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    if (formErrors[name as keyof typeof formErrors]) {
+      setFormErrors(prev => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleRadioChange = (value: 'male' | 'female' | '') => {
@@ -129,6 +195,10 @@ const EventForm = () => {
     
     setFormData((prev) => ({ ...prev, resume: file }));
     setResumeFileName(file.name);
+    
+    if (formErrors.resume) {
+      setFormErrors(prev => ({ ...prev, resume: undefined }));
+    }
   };
 
   const handleAdditionalFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -197,6 +267,10 @@ const EventForm = () => {
     
     setFormData((prev) => ({ ...prev, image: file }));
     setImageFileName(file.name);
+    
+    if (formErrors.image) {
+      setFormErrors(prev => ({ ...prev, image: undefined }));
+    }
   };
 
   const parseResume = async () => {
@@ -230,7 +304,6 @@ const EventForm = () => {
           fullText += pageText + ' ';
         }
         
-        // Improved extraction with better regexes
         const extractedData = {
           name: extractField(fullText, /name:?\s*([A-Za-z\s]+)/i) || 
                 extractField(fullText, /^([A-Z][a-z]+(?: [A-Z][a-z]+){1,2})/m),
@@ -292,7 +365,7 @@ const EventForm = () => {
   
   const extractSkills = (text: string): string[] => {
     const skillKeywords = [
-      'javascript', 'python', 'react', 'node', 'html', 'css', 'sql', 'java', 'c\\+\\+', 
+      'javascript', 'python', 'react', 'node', 'html', 'css', 'sql', 'java', 'c\\+\\+',
       'leadership', 'management', 'communication', 'teamwork', 'problem solving',
       'analytics', 'excel', 'powerpoint', 'project management', 'public speaking',
       'research', 'design', 'photoshop', 'illustrator', 'agile', 'scrum'
@@ -318,6 +391,36 @@ const EventForm = () => {
     return words.join(' ');
   };
 
+  const validateForm = (): boolean => {
+    const errors: {
+      name?: string;
+      email?: string;
+      resume?: string;
+      image?: string;
+    } = {};
+    
+    if (!formData.name.trim()) {
+      errors.name = "Full name is required";
+    }
+    
+    if (!formData.email.trim()) {
+      errors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = "Please enter a valid email address";
+    }
+    
+    if (!formData.resume) {
+      errors.resume = "Please upload your resume";
+    }
+    
+    if (!formData.image) {
+      errors.image = "Please upload a profile image";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -339,11 +442,10 @@ const EventForm = () => {
       return;
     }
 
-    // Validate required fields
-    if (!formData.name || !formData.email || !formData.image || !formData.resume) {
+    if (!validateForm()) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields (name, email, profile image, and resume)",
+        description: "Please fill in all required fields",
         variant: "destructive"
       });
       return;
@@ -354,7 +456,6 @@ const EventForm = () => {
     try {
       console.log("Starting file uploads...");
       
-      // Upload profile image
       const imageFile = formData.image;
       const imagePath = `${userId}/${Date.now()}_${imageFile.name}`;
       
@@ -373,7 +474,6 @@ const EventForm = () => {
       
       console.log("Image uploaded successfully:", imageUrl);
       
-      // Upload resume
       const resumeFile = formData.resume;
       const resumePath = `${userId}/${Date.now()}_${resumeFile.name}`;
       
@@ -392,7 +492,6 @@ const EventForm = () => {
       
       console.log("Resume uploaded successfully:", resumeUrl);
       
-      // Upload additional files
       const additionalFilesUrls: string[] = [];
       
       for (const file of formData.additionalFiles) {
@@ -416,7 +515,6 @@ const EventForm = () => {
       
       console.log("Additional files uploaded successfully:", additionalFilesUrls);
       
-      // Create profile data with uploaded file URLs
       const ageValue = formData.age ? (typeof formData.age === 'string' ? parseInt(formData.age) : formData.age) : null;
       
       const profileData = {
@@ -440,7 +538,6 @@ const EventForm = () => {
       
       console.log("Saving profile data to Supabase:", profileData);
       
-      // Save profile data to database
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert(profileData);
@@ -452,7 +549,6 @@ const EventForm = () => {
       
       console.log("Profile saved successfully");
       
-      // Call the Gemini API through edge function to generate embedding
       const { error: embeddingError } = await supabase.functions
         .invoke('generate-embedding', {
           body: { 
@@ -473,7 +569,6 @@ const EventForm = () => {
         console.log("Embedding generated successfully");
       }
       
-      // Add user to event participants
       const { error: participantError } = await supabase
         .from('participants')
         .upsert({
@@ -521,31 +616,55 @@ const EventForm = () => {
           <CardDescription>Please fill out the form below to complete your registration</CardDescription>
         </CardHeader>
         
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
+          {Object.values(formErrors).some(error => !!error) && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                Please fix the errors below before submitting the form.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Full Name <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label htmlFor="name" className={formErrors.name ? "text-destructive" : ""}>
+                    Full Name <span className="text-destructive">*</span>
+                  </Label>
                   <Input 
                     id="name" 
                     name="name" 
                     value={formData.name} 
                     onChange={handleChange} 
-                    required 
+                    className={formErrors.name ? "border-destructive" : ""}
+                    aria-invalid={!!formErrors.name}
+                    aria-describedby={formErrors.name ? "name-error" : undefined}
                   />
+                  {formErrors.name && (
+                    <p id="name-error" className="text-sm text-destructive">{formErrors.name}</p>
+                  )}
                 </div>
                 
-                <div>
-                  <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className={formErrors.email ? "text-destructive" : ""}>
+                    Email <span className="text-destructive">*</span>
+                  </Label>
                   <Input 
                     id="email" 
                     name="email" 
                     type="email" 
                     value={formData.email} 
                     onChange={handleChange} 
-                    required 
+                    className={formErrors.email ? "border-destructive" : ""}
+                    aria-invalid={!!formErrors.email}
+                    aria-describedby={formErrors.email ? "email-error" : undefined}
                   />
+                  {formErrors.email && (
+                    <p id="email-error" className="text-sm text-destructive">{formErrors.email}</p>
+                  )}
                 </div>
                 
                 <div>
@@ -599,12 +718,18 @@ const EventForm = () => {
               
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="profile-picture">Profile Picture <span className="text-destructive">*</span></Label>
+                  <Label 
+                    htmlFor="profile-picture" 
+                    className={formErrors.image ? "text-destructive" : ""}
+                  >
+                    Profile Picture <span className="text-destructive">*</span>
+                  </Label>
                   <div className="flex items-center gap-2">
                     <Button 
                       type="button" 
                       variant="outline" 
                       onClick={() => imageInputRef.current?.click()}
+                      className={formErrors.image ? "border-destructive" : ""}
                     >
                       <Upload className="mr-2 h-4 w-4" />
                       Upload Image
@@ -614,17 +739,27 @@ const EventForm = () => {
                   <input 
                     ref={imageInputRef}
                     id="profile-picture" 
+                    name="profile-picture"
                     type="file" 
                     accept="image/*" 
                     className="hidden" 
                     onChange={handleImageChange} 
-                    required
+                    aria-invalid={!!formErrors.image}
+                    aria-describedby={formErrors.image ? "image-error" : undefined}
                   />
+                  {formErrors.image && (
+                    <p id="image-error" className="text-sm text-destructive">{formErrors.image}</p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <Label htmlFor="resume">Resume (PDF/DOCX) <span className="text-destructive">*</span></Label>
+                    <Label 
+                      htmlFor="resume"
+                      className={formErrors.resume ? "text-destructive" : ""}
+                    >
+                      Resume (PDF/DOCX) <span className="text-destructive">*</span>
+                    </Label>
                     {formData.resume && (
                       <Button 
                         type="button" 
@@ -649,6 +784,7 @@ const EventForm = () => {
                       type="button" 
                       variant="outline" 
                       onClick={() => resumeInputRef.current?.click()}
+                      className={formErrors.resume ? "border-destructive" : ""}
                     >
                       <Upload className="mr-2 h-4 w-4" />
                       Upload Resume
@@ -658,12 +794,17 @@ const EventForm = () => {
                   <input 
                     ref={resumeInputRef}
                     id="resume" 
+                    name="resume"
                     type="file" 
                     accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
                     className="hidden" 
                     onChange={handleResumeChange} 
-                    required
+                    aria-invalid={!!formErrors.resume}
+                    aria-describedby={formErrors.resume ? "resume-error" : undefined}
                   />
+                  {formErrors.resume && (
+                    <p id="resume-error" className="text-sm text-destructive">{formErrors.resume}</p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -681,6 +822,7 @@ const EventForm = () => {
                   <input 
                     ref={fileInputRef}
                     id="additional-files" 
+                    name="additional-files"
                     type="file" 
                     accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
                     className="hidden" 
