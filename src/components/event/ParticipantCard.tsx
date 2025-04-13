@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,8 +42,10 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
     return "bg-red-400 text-white";
   };
 
-  // Log the similarity score for debugging
-  console.log(`Rendering card for ${profile.name} with similarity score:`, profile.similarity_score);
+  // Convert undefined similarity scores to 0 to ensure consistent display
+  const similarityScore = typeof profile.similarity_score === 'number' ? profile.similarity_score : 0;
+  
+  console.log(`Rendering card for ${profile.name} with similarity score:`, similarityScore);
 
   return (
     <Card key={profile.id} className="overflow-hidden">
@@ -61,12 +62,11 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
             </div>
           </div>
           
-          {profile.similarity_score !== undefined && (
-            <Badge className={`${getSimilarityBadgeStyle(profile.similarity_score)} flex items-center`}>
-              <BadgePercent className="h-3 w-3 mr-1" />
-              {formatSimilarityPercentage(profile.similarity_score)}
-            </Badge>
-          )}
+          {/* Always show similarity badge with consistent formatting */}
+          <Badge className={`${getSimilarityBadgeStyle(similarityScore)} flex items-center`}>
+            <BadgePercent className="h-3 w-3 mr-1" />
+            {formatSimilarityPercentage(similarityScore)}
+          </Badge>
         </div>
       </CardHeader>
       
@@ -127,17 +127,11 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
       </CardContent>
       
       <CardFooter className="bg-muted/30 justify-between">
-        {profile.similarity_score !== undefined ? (
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Percent className="h-3 w-3" />
-            Match: {formatSimilarityPercentage(profile.similarity_score)}
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="flex items-center gap-1 text-muted-foreground">
-            <Percent className="h-3 w-3" />
-            Match: N/A
-          </Badge>
-        )}
+        {/* Always show match percentage, using 0% as default when no score is found */}
+        <Badge variant="outline" className="flex items-center gap-1">
+          <Percent className="h-3 w-3" />
+          Match: {formatSimilarityPercentage(similarityScore)}
+        </Badge>
         
         {profile.linkedin_url ? (
           <a 

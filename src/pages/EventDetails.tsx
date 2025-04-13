@@ -70,7 +70,8 @@ const EventDetails = () => {
       if (userId && profilesData.length > 0) {
         await fetchSimilarityScores(profilesData);
       } else {
-        // Ensure we're not filtering out the current user here, that should be done in ParticipantsList
+        // When no similarity scores are available, initialize profiles without scores
+        console.log('No similarity scores available, setting profiles without scores');
         const initialProfiles = profilesData as ProfileWithSimilarity[];
         setProfiles(initialProfiles);
       }
@@ -120,9 +121,10 @@ const EventDetails = () => {
         );
         
         // Add the similarity score to the profile
+        // Default to 0 instead of undefined when no score is found
         const similarityScore = similarityEntry?.similarity_score !== undefined 
           ? similarityEntry.similarity_score 
-          : undefined;
+          : 0;
           
         console.log(`Similarity score for ${profile.name}:`, similarityScore);
         
