@@ -81,21 +81,129 @@ async function getEventIndexName(eventId: string): Promise<string> {
   }
 }
 
+// Function to fetch file content from Supabase storage
+async function fetchFileContent(fileUrl: string): Promise<{ data: ArrayBuffer | null; contentType: string | null }> {
+  try {
+    if (!fileUrl) {
+      console.error('Empty file URL provided')
+      return { data: null, contentType: null }
+    }
+
+    console.log(`Fetching file content from: ${fileUrl}`)
+    
+    // Extract the bucket and path from the URL
+    // Format: /storage/v1/object/public/[bucket]/[path]
+    const urlParts = fileUrl.split('/storage/v1/object/public/')
+    if (urlParts.length < 2) {
+      console.error(`Invalid storage URL format: ${fileUrl}`)
+      return { data: null, contentType: null }
+    }
+    
+    const pathParts = urlParts[1].split('/', 1)
+    const bucket = pathParts[0]
+    const path = urlParts[1].substring(bucket.length + 1)
+    
+    console.log(`Parsed storage path - Bucket: ${bucket}, Path: ${path}`)
+    
+    // Download the file using Supabase Storage API
+    const { data, error } = await supabase
+      .storage
+      .from(bucket)
+      .download(path)
+    
+    if (error) {
+      console.error(`Error downloading file: ${error.message}`)
+      return { data: null, contentType: null }
+    }
+    
+    if (!data) {
+      console.error('No data returned from storage')
+      return { data: null, contentType: null }
+    }
+    
+    // Get content type
+    const contentType = data.type
+    
+    // Convert blob to array buffer
+    const arrayBuffer = await data.arrayBuffer()
+    
+    console.log(`Successfully fetched file (${contentType}), size: ${arrayBuffer.byteLength} bytes`)
+    
+    return { data: arrayBuffer, contentType }
+  } catch (error) {
+    console.error('Error fetching file content:', error)
+    return { data: null, contentType: null }
+  }
+}
+
 // Function to send user data to webhook
 async function sendUserDataToWebhook(userId: string, eventId: string, profileData: Profile, pineconeIndex: string): Promise<boolean> {
   try {
     console.log(`Sending user data to webhook for user ${userId} in event ${eventId}`)
     
-    // Prepare the payload
-    const payload = {
+    // Prepare the basic payload
+    const payload: any = {
       userId,
       eventId,
-      profileData,
+      profileData: { ...profileData },
       pineconeIndex,
       sessionId: "233076" // Adding the test ID as requested
     }
     
+    // Fetch resume file if URL exists
+    if (profileData.resume_url) {
+      console.log('Fetching resume file content')
+      const resumeContent = await fetchFileContent(profileData.resume_url)
+      
+      if (resumeContent.data) {
+        // Convert ArrayBuffer to Base64
+        const base64Resume = btoa(
+          String.fromCharCode(...new Uint8Array(resumeContent.data))
+        )
+        
+        // Add resume content to payload
+        payload.resumeContent = {
+          data: base64Resume,
+          contentType: resumeContent.contentType,
+          fileName: profileData.resume_url.split('/').pop() || 'resume'
+        }
+        
+        console.log('Resume file content added to payload')
+      } else {
+        console.warn('Could not fetch resume content')
+      }
+    }
+    
+    // Fetch additional files if they exist
+    if (profileData.additional_files && profileData.additional_files.length > 0) {
+      console.log(`Fetching ${profileData.additional_files.length} additional files`)
+      payload.additionalFilesContent = []
+      
+      for (const fileUrl of profileData.additional_files) {
+        const fileContent = await fetchFileContent(fileUrl)
+        
+        if (fileContent.data) {
+          // Convert ArrayBuffer to Base64
+          const base64File = btoa(
+            String.fromCharCode(...new Uint8Array(fileContent.data))
+          )
+          
+          // Add file content to payload
+          payload.additionalFilesContent.push({
+            data: base64File,
+            contentType: fileContent.contentType,
+            fileName: fileUrl.split('/').pop() || 'file'
+          })
+          
+          console.log(`Added file content for: ${fileUrl.split('/').pop() || 'file'}`)
+        } else {
+          console.warn(`Could not fetch content for file: ${fileUrl}`)
+        }
+      }
+    }
+    
     // Send POST request to webhook
+    console.log('Sending payload to webhook')
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
