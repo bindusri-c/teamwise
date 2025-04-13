@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -124,14 +123,13 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
       </CardContent>
       
       <CardFooter className="bg-muted/30 justify-between">
-        <div className="flex items-center">
-          {profile.similarity_score !== undefined && (
-            <Badge variant="outline" className="flex items-center gap-1">
-              <Percent className="h-3 w-3" />
-              Match: {formatSimilarityPercentage(profile.similarity_score)}
-            </Badge>
-          )}
-        </div>
+        {profile.similarity_score !== undefined && (
+          <Badge variant="outline" className="flex items-center gap-1">
+            <Percent className="h-3 w-3" />
+            Match: {formatSimilarityPercentage(profile.similarity_score)}
+          </Badge>
+        )}
+        
         {profile.linkedin_url ? (
           <a 
             href={profile.linkedin_url} 
