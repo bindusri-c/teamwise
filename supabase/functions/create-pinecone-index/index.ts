@@ -49,8 +49,16 @@ Deno.serve(async (req) => {
     console.log(`Creating Pinecone index for event: ${eventName} (${eventId})`)
 
     // Generate a valid index name (lowercase alphanumeric and hyphens only)
-    // Using the event code as a basis since it's short and unique
-    const indexName = `event-${eventCode.toLowerCase()}`
+    // Using the event name as a basis, sanitized for Pinecone requirements
+    let indexName = eventName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-') // Replace non-alphanumeric chars with hyphens
+      .replace(/-+/g, '-')        // Replace multiple hyphens with a single one
+      .replace(/^-|-$/g, '')      // Remove leading and trailing hyphens
+      .substring(0, 20);          // Limit length to 20 chars (Pinecone limit)
+    
+    // Add a prefix to ensure we don't have name collisions
+    indexName = `evt-${indexName}`;
 
     try {
       // Create Pinecone index using the API
