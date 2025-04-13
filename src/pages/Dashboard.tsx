@@ -5,13 +5,16 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const Dashboard = () => {
   const { user } = useAuth();
+  
+  // Extract display name from email or use a fallback
+  const displayName = user?.email ? user.email.split('@')[0] : 'User';
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <DashboardHeader />
       
       <main className="flex-1 container py-8 px-4 md:px-6">
-        <h1 className="text-3xl font-bold mb-6">Welcome, {user?.name || 'User'}</h1>
+        <h1 className="text-3xl font-bold mb-6">Welcome, {displayName}</h1>
         
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card>
