@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Percent } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -181,12 +181,18 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
       .slice(0, 2);
   };
 
-  const getSimilarityLabel = (score: number) => {
-    if (score > 0.8) return { label: "Very High", color: "bg-green-500" };
-    if (score > 0.6) return { label: "High", color: "bg-green-400" };
-    if (score > 0.4) return { label: "Medium", color: "bg-yellow-400" };
-    if (score > 0.2) return { label: "Low", color: "bg-orange-400" };
-    return { label: "Very Low", color: "bg-red-400" };
+  // Format the similarity score as a percentage
+  const formatSimilarityPercentage = (score: number) => {
+    return `${Math.round(score * 100)}%`;
+  };
+
+  // Get styling for score badge based on percentage
+  const getSimilarityBadgeStyle = (score: number) => {
+    if (score > 0.8) return "bg-green-500 text-white";
+    if (score > 0.6) return "bg-green-400 text-white";
+    if (score > 0.4) return "bg-yellow-400 text-white";
+    if (score > 0.2) return "bg-orange-400 text-white";
+    return "bg-red-400 text-white";
   };
 
   if (error) {
@@ -255,9 +261,7 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
           </div>
         ) : similarProfiles.length > 0 ? (
           <div className="space-y-4">
-            {similarProfiles.map((profile) => {
-              const similarity = getSimilarityLabel(profile.similarity_score || 0);
-              
+            {similarProfiles.map((profile) => {              
               return (
                 <div key={profile.id} className="flex items-center space-x-4 p-2 rounded-lg border">
                   <Avatar className="h-10 w-10">
@@ -274,8 +278,9 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
                       ))}
                     </div>
                   </div>
-                  <Badge className={`${similarity.color} text-white`}>
-                    {similarity.label} Match
+                  <Badge className={getSimilarityBadgeStyle(profile.similarity_score || 0)}>
+                    <Percent className="h-3 w-3 mr-1" />
+                    {formatSimilarityPercentage(profile.similarity_score || 0)}
                   </Badge>
                 </div>
               );

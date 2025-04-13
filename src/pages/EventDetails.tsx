@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,9 +6,11 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Linkedin, User, ArrowLeft, UserPlus, Copy, CheckCircle2 } from 'lucide-react';
+import { Linkedin, User, ArrowLeft, UserPlus, Copy, CheckCircle2, Percent } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import ProfileSimilarityScore from '@/components/ProfileSimilarityScore';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Profile = {
   id: string;
@@ -23,16 +24,21 @@ type Profile = {
   looking_for: string | null;
 };
 
+type ProfileWithSimilarity = Profile & {
+  similarity_score?: number;
+};
+
 const EventDetails = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { userId } = useCurrentUser();
   const [event, setEvent] = useState<Tables<'events'> | null>(null);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<ProfileWithSimilarity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreator, setIsCreator] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [loadingSimilarities, setLoadingSimilarities] = useState(false);
 
   useEffect(() => {
     if (eventId) {
@@ -65,7 +71,11 @@ const EventDetails = () => {
         
       if (profilesError) throw profilesError;
       
-      setProfiles(profilesData as Profile[]);
+      if (userId && profilesData.length > 0) {
+        await fetchSimilarityScores(profilesData);
+      } else {
+        setProfiles(profilesData as ProfileWithSimilarity[]);
+      }
     } catch (error: any) {
       console.error('Error fetching event details:', error);
       toast({
@@ -76,6 +86,48 @@ const EventDetails = () => {
       navigate('/dashboard');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchSimilarityScores = async (profilesData: Profile[]) => {
+    if (!userId || !eventId) return;
+    
+    setLoadingSimilarities(true);
+    try {
+      // Fetch similarity scores from profile_similarities table
+      const { data: similarityData, error: similarityError } = await supabase
+        .from('profile_similarities')
+        .select('profile_id_1, profile_id_2, similarity_score')
+        .eq('event_id', eventId)
+        .or(`profile_id_1.eq.${userId},profile_id_2.eq.${userId}`);
+      
+      if (similarityError) throw similarityError;
+      
+      // Map similarity scores to profiles
+      const profilesWithSimilarity = profilesData.map(profile => {
+        // Skip if it's the current user
+        if (profile.id === userId) {
+          return { ...profile, similarity_score: 1.0 }; // 100% match with self
+        }
+        
+        // Find similarity score entry for this profile
+        const similarityEntry = similarityData?.find(
+          entry => 
+            (entry.profile_id_1 === userId && entry.profile_id_2 === profile.id) ||
+            (entry.profile_id_1 === profile.id && entry.profile_id_2 === userId)
+        );
+        
+        return {
+          ...profile,
+          similarity_score: similarityEntry?.similarity_score || 0
+        };
+      });
+      
+      setProfiles(profilesWithSimilarity);
+    } catch (error) {
+      console.error('Error fetching similarity scores:', error);
+    } finally {
+      setLoadingSimilarities(false);
     }
   };
 
@@ -103,6 +155,18 @@ const EventDetails = () => {
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const formatSimilarityPercentage = (score: number) => {
+    return `${Math.round(score * 100)}%`;
+  };
+
+  const getSimilarityBadgeStyle = (score: number) => {
+    if (score > 0.8) return "bg-green-500 text-white";
+    if (score > 0.6) return "bg-green-400 text-white";
+    if (score > 0.4) return "bg-yellow-400 text-white";
+    if (score > 0.2) return "bg-orange-400 text-white";
+    return "bg-red-400 text-white";
   };
 
   if (isLoading) {
@@ -191,7 +255,6 @@ const EventDetails = () => {
         </CardContent>
       </Card>
       
-      {/* Add the similarity score component if user has a profile */}
       {userHasProfile && userId && eventId && (
         <div className="mb-8">
           <ProfileSimilarityScore userId={userId} eventId={eventId} />
@@ -212,15 +275,24 @@ const EventDetails = () => {
             {profiles.map((profile) => (
               <Card key={profile.id} className="overflow-hidden">
                 <CardHeader className="pb-2">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={profile.image_url || undefined} alt={profile.name} />
-                      <AvatarFallback>{getInitials(profile.name || 'User')}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <CardTitle className="text-lg">{profile.name || 'Anonymous User'}</CardTitle>
-                      <CardDescription>{profile.email}</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={profile.image_url || undefined} alt={profile.name} />
+                        <AvatarFallback>{getInitials(profile.name || 'User')}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <CardTitle className="text-lg">{profile.name || 'Anonymous User'}</CardTitle>
+                        <CardDescription>{profile.email}</CardDescription>
+                      </div>
                     </div>
+                    
+                    {profile.similarity_score !== undefined && userHasProfile && (
+                      <Badge className={getSimilarityBadgeStyle(profile.similarity_score)}>
+                        <Percent className="h-3 w-3 mr-1" />
+                        {formatSimilarityPercentage(profile.similarity_score)}
+                      </Badge>
+                    )}
                   </div>
                 </CardHeader>
                 
