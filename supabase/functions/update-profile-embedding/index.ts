@@ -14,6 +14,140 @@ const handleCors = (req: Request) => {
   }
 };
 
+// Helper function to generate embedding vector using Gemini API with retries
+async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
+  console.log(`Generating embedding for text of length: ${text.length}`);
+  
+  const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+  const geminiApiEndpoint = Deno.env.get("GEMINI_API_ENDPOINT") || 
+                           'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent';
+  
+  if (!geminiApiKey) {
+    throw new Error("Gemini API key not found in environment variables");
+  }
+  
+  // Truncate text if too long (Gemini has token limits)
+  const truncatedText = text.length > 2048 ? text.substring(0, 2048) : text;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Use Gemini API for embedding generation
+      const response = await fetch(
+        `${geminiApiEndpoint}?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'embedding-001',
+            content: { parts: [{ text: truncatedText }] },
+          }),
+        }
+      );
+
+      if (response.status === 429 && attempt < maxRetries) {
+        // Rate limit hit, implement exponential backoff
+        const backoffTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s backoff
+        console.log(`Rate limited. Retrying in ${backoffTime}ms (attempt ${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error from Gemini API: ${response.status} ${errorText}`);
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Return the embedding values
+      if (data && data.embedding && data.embedding.values) {
+        console.log(`Successfully generated embedding with dimension: ${data.embedding.values.length}`);
+        return data.embedding.values;
+      } else {
+        console.error('Unexpected response format from Gemini API:', JSON.stringify(data));
+        throw new Error('Invalid embedding response format from Gemini API');
+      }
+    } catch (error) {
+      if (attempt === maxRetries) {
+        console.error('All embedding generation attempts failed:', error);
+        throw error;
+      }
+      console.error(`Embedding attempt ${attempt} failed:`, error);
+      // Implement backoff for other errors too
+      await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+    }
+  }
+  
+  throw new Error('Failed to generate embedding after all retry attempts');
+}
+
+// Store embedding in Pinecone
+async function storeEmbeddingInPinecone(userId: string, profileData: any, embedding: number[]): Promise<void> {
+  try {
+    const pineconeApiKey = Deno.env.get("PINECONE_API_KEY");
+    const pineconeProjectId = Deno.env.get("PINECONE_PROJECT_ID");
+    const pineconeEnvironment = Deno.env.get("PINECONE_ENVIRONMENT");
+    const pineconeIndexName = Deno.env.get("PINECONE_INDEX_NAME") || 'profiles';
+    
+    if (!pineconeApiKey || !pineconeProjectId || !pineconeEnvironment) {
+      console.log('Pinecone configuration incomplete, skipping Pinecone storage');
+      return;
+    }
+
+    // Create metadata for the vector
+    const metadata = {
+      user_id: userId,
+      name: profileData.name,
+      email: profileData.email || null,
+      age: profileData.age?.toString() || null,
+      gender: profileData.gender || null,
+      hobbies: profileData.hobbies || null,
+      skills: profileData.skills?.join(", ") || null,
+      interests: profileData.interests?.join(", ") || null,
+      about_you: profileData.aboutYou ? profileData.aboutYou.substring(0, 1000) : null,
+      linkedin_url: profileData.linkedinUrl || null
+    };
+
+    // Format: https://<index-name>-<project-id>.svc.<environment>.pinecone.io/vectors/upsert
+    const pineconeUrl = `https://${pineconeIndexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
+    
+    const body = {
+      vectors: [
+        {
+          id: userId,
+          values: embedding,
+          metadata
+        }
+      ]
+    };
+
+    console.log(`Storing embedding in Pinecone for user ${userId}`);
+    
+    const response = await fetch(pineconeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Api-Key': pineconeApiKey
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error from Pinecone: ${response.status} ${errorText}`);
+      throw new Error(`Pinecone upsert failed: ${response.status}`);
+    }
+
+    console.log(`Successfully stored embedding in Pinecone for user: ${userId}`);
+  } catch (error) {
+    console.error('Error storing embedding in Pinecone:', error);
+    // Don't throw the error - we want to continue even if Pinecone storage fails
+  }
+}
+
 serve(async (req) => {
   // Handle CORS
   const corsResponse = handleCors(req);
@@ -50,28 +184,16 @@ serve(async (req) => {
 
     console.log("Profile text for embedding:", profileText);
 
-    // Insert profile data into Pinecone
-    const pineconeApiKey = Deno.env.get("PINECONE_API_KEY");
+    // Generate embedding from the profile text using Gemini API
+    const embedding = await generateEmbedding(profileText);
     
-    if (!pineconeApiKey) {
-      throw new Error("Pinecone API key not found in environment variables");
-    }
-
-    // Create an embedding from the profile text using a model
-    // For simplicity, we'll use a mock embedding here
-    // In a real application, you'd use an embedding model like OpenAI or a similar service
-    
-    // For demonstration purposes, we'll create a simple random vector
-    // This should be replaced with actual embedding generation in production
-    const mockEmbedding = Array.from({ length: 384 }, () => Math.random());
-    
-    console.log("Generated embedding vector with dimensions:", mockEmbedding.length);
+    console.log("Generated embedding vector with dimensions:", embedding.length);
 
     // Store the embedding in the database
     const { error } = await supabase
       .from('profiles')
       .update({
-        embedding: mockEmbedding,
+        embedding: embedding,
         // Also update other profile fields
         name: profileData.name,
         age: profileData.age ? parseInt(profileData.age) : null,
@@ -89,6 +211,9 @@ serve(async (req) => {
       console.error("Error updating profile in database:", error);
       throw error;
     }
+
+    // Also store the embedding in Pinecone for later retrieval
+    await storeEmbeddingInPinecone(userId, profileData, embedding);
 
     console.log("Successfully updated profile with embedding for user:", userId);
 

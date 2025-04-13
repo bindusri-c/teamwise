@@ -26,6 +26,7 @@ export const useProfileForm = (eventId?: string) => {
   
   const [formErrors, setFormErrors] = useState<{
     resume?: string;
+    name?: string;
   }>({});
   
   const [resumeFileName, setResumeFileName] = useState<string>('');
@@ -122,10 +123,11 @@ export const useProfileForm = (eventId?: string) => {
   const validateForm = (): boolean => {
     const errors: {
       resume?: string;
+      name?: string;
     } = {};
     
-    if (!formData.resume) {
-      errors.resume = "Please upload your resume";
+    if (!formData.name.trim()) {
+      errors.name = "Please enter your name";
     }
     
     setFormErrors(errors);
