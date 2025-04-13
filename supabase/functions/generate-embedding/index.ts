@@ -81,16 +81,80 @@ async function getEventIndexName(eventId: string): Promise<string> {
   }
 }
 
+// Function to extract text from PDF
+async function extractTextFromPdf(pdfUrl: string): Promise<string> {
+  try {
+    console.log(`Extracting text from PDF: ${pdfUrl}`)
+    
+    // Download the PDF
+    const response = await fetch(pdfUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to download PDF: ${response.status} ${response.statusText}`)
+    }
+    
+    // For simplicity, we'll extract basic text content
+    // In a production environment, you might want to use a more sophisticated PDF parsing library
+    const pdfBuffer = await response.arrayBuffer()
+    
+    // This is a simplified text extraction approach
+    // It's not a full PDF parser but will extract some readable text
+    const text = extractTextFromArrayBuffer(pdfBuffer)
+    
+    console.log(`Successfully extracted ${text.length} characters from PDF`)
+    return text
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error)
+    return "Error extracting text from resume"
+  }
+}
+
+// Simple function to extract text from ArrayBuffer
+function extractTextFromArrayBuffer(buffer: ArrayBuffer): string {
+  // Convert ArrayBuffer to string (only extracts ASCII text)
+  const bytes = new Uint8Array(buffer)
+  let result = ""
+  
+  // Simple text extraction - this is not a full PDF parser
+  // but will extract some readable text from PDFs
+  for (let i = 0; i < bytes.length; i++) {
+    const char = bytes[i]
+    // Only include printable ASCII characters
+    if (char >= 32 && char <= 126) {
+      result += String.fromCharCode(char)
+    } else if (char === 10 || char === 13) {
+      // Add newlines
+      result += "\n"
+    }
+  }
+  
+  // Clean up the extracted text
+  return result
+    .replace(/[^\x20-\x7E\n]/g, "") // Remove non-printable chars
+    .replace(/\s+/g, " ")           // Normalize whitespace
+    .trim()
+}
+
 // Function to send user data to webhook
 async function sendUserDataToWebhook(userId: string, eventId: string, profileData: Profile, pineconeIndex: string): Promise<boolean> {
   try {
     console.log(`Sending user data to webhook for user ${userId} in event ${eventId}`)
     
+    // Create a modified profile data object with resume text instead of URL
+    const enhancedProfileData = { ...profileData }
+    
+    // Extract text from resume if URL is available
+    if (profileData.resume_url) {
+      console.log(`Extracting text from resume: ${profileData.resume_url}`)
+      const resumeText = await extractTextFromPdf(profileData.resume_url)
+      // Add the extracted text to the profile data
+      enhancedProfileData.resume_text = resumeText
+    }
+    
     // Prepare the payload
     const payload = {
       userId,
       eventId,
-      profileData,
+      profileData: enhancedProfileData,
       pineconeIndex,
       sessionId: "233076" // Adding the test ID as requested
     }
@@ -190,3 +254,4 @@ Deno.serve(async (req) => {
     )
   }
 })
+
