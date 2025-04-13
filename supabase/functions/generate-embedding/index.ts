@@ -48,8 +48,41 @@ export const corsResponse = () => {
   })
 }
 
+// Function to get event name and calculate index name
+async function getEventIndexName(eventId: string): Promise<string> {
+  try {
+    console.log(`Getting event name for event ID: ${eventId}`)
+    
+    // Get event from database
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('name')
+      .eq('id', eventId)
+      .single()
+      
+    if (eventError) {
+      console.error(`Error fetching event: ${eventError.message}`)
+      throw eventError
+    }
+    
+    if (!eventData || !eventData.name) {
+      console.error(`No event found with ID: ${eventId}`)
+      throw new Error(`Event not found: ${eventId}`)
+    }
+    
+    // Create index name using format evt-{name}
+    const indexName = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`
+    console.log(`Generated index name: ${indexName} for event: ${eventData.name}`)
+    
+    return indexName
+  } catch (error) {
+    console.error('Error getting event index name:', error)
+    return "evt-default" // Fallback index name
+  }
+}
+
 // Function to send user data to webhook
-async function sendUserDataToWebhook(userId: string, eventId: string, profileData: Profile): Promise<boolean> {
+async function sendUserDataToWebhook(userId: string, eventId: string, profileData: Profile, pineconeIndex: string): Promise<boolean> {
   try {
     console.log(`Sending user data to webhook for user ${userId} in event ${eventId}`)
     
@@ -57,7 +90,9 @@ async function sendUserDataToWebhook(userId: string, eventId: string, profileDat
     const payload = {
       userId,
       eventId,
-      profileData
+      profileData,
+      pineconeIndex,
+      sessionId: "233076" // Adding the test ID as requested
     }
     
     // Send POST request to webhook
@@ -108,8 +143,12 @@ Deno.serve(async (req) => {
 
     console.log(`Processing profile data for user: ${userId}, event: ${eventId}`)
     
+    // Get Pinecone index name based on event name
+    const indexName = await getEventIndexName(eventId)
+    console.log(`Using Pinecone index: ${indexName}`)
+    
     // Send user data to webhook
-    const success = await sendUserDataToWebhook(userId, eventId, profileData)
+    const success = await sendUserDataToWebhook(userId, eventId, profileData, indexName)
     
     if (!success) {
       throw new Error('Failed to send data to webhook')
