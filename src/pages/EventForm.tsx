@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
-import { Loader2, Upload, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, ArrowLeft, AlertCircle, Info } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -635,9 +635,15 @@ const EventForm = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className={formErrors.name ? "text-destructive" : ""}>
-                    Full Name <span className="text-destructive">*</span>
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="name" className={formErrors.name ? "text-destructive" : ""}>
+                      Full Name <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="text-xs flex items-center text-muted-foreground">
+                      <Info className="h-3 w-3 mr-1" />
+                      From your account
+                    </div>
+                  </div>
                   <Input 
                     id="name" 
                     name="name" 
@@ -646,6 +652,7 @@ const EventForm = () => {
                     className={formErrors.name ? "border-destructive" : ""}
                     aria-invalid={!!formErrors.name}
                     aria-describedby={formErrors.name ? "name-error" : undefined}
+                    placeholder="Your full name"
                   />
                   {formErrors.name && (
                     <p id="name-error" className="text-sm text-destructive">{formErrors.name}</p>
@@ -653,9 +660,15 @@ const EventForm = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="email" className={formErrors.email ? "text-destructive" : ""}>
-                    Email <span className="text-destructive">*</span>
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="email" className={formErrors.email ? "text-destructive" : ""}>
+                      Email <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="text-xs flex items-center text-muted-foreground">
+                      <Info className="h-3 w-3 mr-1" />
+                      From your account
+                    </div>
+                  </div>
                   <Input 
                     id="email" 
                     name="email" 
@@ -665,6 +678,7 @@ const EventForm = () => {
                     className={formErrors.email ? "border-destructive" : ""}
                     aria-invalid={!!formErrors.email}
                     aria-describedby={formErrors.email ? "email-error" : undefined}
+                    readOnly
                   />
                   {formErrors.email && (
                     <p id="email-error" className="text-sm text-destructive">{formErrors.email}</p>
