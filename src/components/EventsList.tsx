@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -8,6 +7,7 @@ import { Tables } from '@/integrations/supabase/types';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Linkedin, User } from 'lucide-react';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 type Event = Tables<'events'> & {
   is_creator: boolean;
@@ -31,6 +31,7 @@ const EventsList = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { userId } = useCurrentUser();
 
   useEffect(() => {
     fetchEvents();
@@ -39,14 +40,15 @@ const EventsList = () => {
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
-      const user = (await supabase.auth.getUser()).data.user;
+      const { data: userData, error: userError } = await supabase.auth.getUser();
       
-      if (!user) {
+      if (userError || !userData.user) {
         setIsLoading(false);
         return;
       }
 
-      // Get events the user created
+      const user = userData.user;
+      
       const { data: createdEvents, error: createdError } = await supabase
         .from('events')
         .select('*')
@@ -54,7 +56,6 @@ const EventsList = () => {
 
       if (createdError) throw createdError;
 
-      // Get events the user joined
       const { data: participantEvents, error: participantError } = await supabase
         .from('participants')
         .select('event_id')
@@ -73,7 +74,6 @@ const EventsList = () => {
 
         if (joinedError) throw joinedError;
 
-        // Mark events as created by user or joined
         const createdWithFlag = createdEvents.map(event => ({
           ...event,
           is_creator: true
@@ -84,10 +84,8 @@ const EventsList = () => {
           is_creator: false
         }));
 
-        // Combine events
         allEvents = [...createdWithFlag, ...joinedWithFlag];
       } else {
-        // Just set created events
         const createdWithFlag = createdEvents.map(event => ({
           ...event,
           is_creator: true
@@ -97,7 +95,6 @@ const EventsList = () => {
       
       setEvents(allEvents);
       
-      // Fetch profiles for each event
       const profileData: Record<string, Profile[]> = {};
       
       for (const event of allEvents) {
@@ -185,7 +182,7 @@ const EventsList = () => {
                 variant="outline" 
                 onClick={() => viewEventForm(event.id)}
               >
-                {profiles[event.id]?.some(p => p.id === (supabase.auth.getUser().data?.user?.id ?? '')) 
+                {profiles[event.id]?.some(p => p.id === userId) 
                   ? "Update Profile" 
                   : "Complete Registration"}
               </Button>

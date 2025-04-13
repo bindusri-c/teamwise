@@ -62,14 +62,174 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          about_you: string | null
+          additional_files: string[] | null
+          age: number | null
+          created_at: string | null
+          email: string | null
+          embedding: string | null
+          event_id: string | null
+          gender: string | null
+          hobbies: string | null
+          id: string
+          image_url: string | null
+          interests: string[] | null
+          linkedin_url: string | null
+          looking_for: string | null
+          name: string | null
+          resume_url: string | null
+          skills: string[] | null
+        }
+        Insert: {
+          about_you?: string | null
+          additional_files?: string[] | null
+          age?: number | null
+          created_at?: string | null
+          email?: string | null
+          embedding?: string | null
+          event_id?: string | null
+          gender?: string | null
+          hobbies?: string | null
+          id: string
+          image_url?: string | null
+          interests?: string[] | null
+          linkedin_url?: string | null
+          looking_for?: string | null
+          name?: string | null
+          resume_url?: string | null
+          skills?: string[] | null
+        }
+        Update: {
+          about_you?: string | null
+          additional_files?: string[] | null
+          age?: number | null
+          created_at?: string | null
+          email?: string | null
+          embedding?: string | null
+          event_id?: string | null
+          gender?: string | null
+          hobbies?: string | null
+          id?: string
+          image_url?: string | null
+          interests?: string[] | null
+          linkedin_url?: string | null
+          looking_for?: string | null
+          name?: string | null
+          resume_url?: string | null
+          skills?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      binary_quantize: {
+        Args: { "": unknown } | { "": string }
+        Returns: unknown
+      }
       generate_event_code: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      halfvec_avg: {
+        Args: { "": number[] }
+        Returns: unknown
+      }
+      halfvec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      halfvec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      halfvec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
+      hnsw_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_sparsevec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnswhandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflathandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      l2_norm: {
+        Args: { "": unknown } | { "": unknown }
+        Returns: number
+      }
+      l2_normalize: {
+        Args: { "": unknown } | { "": string } | { "": unknown }
+        Returns: unknown
+      }
+      sparsevec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      sparsevec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      sparsevec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
+      vector_avg: {
+        Args: { "": number[] }
+        Returns: string
+      }
+      vector_dims: {
+        Args: { "": unknown } | { "": string }
+        Returns: number
+      }
+      vector_norm: {
+        Args: { "": string }
+        Returns: number
+      }
+      vector_out: {
+        Args: { "": string }
+        Returns: unknown
+      }
+      vector_send: {
+        Args: { "": string }
+        Returns: string
+      }
+      vector_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
       }
     }
     Enums: {
