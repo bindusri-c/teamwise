@@ -32,10 +32,12 @@ const JoinEventForm = () => {
       console.log("Attempting to join event with code:", eventCode);
       
       // First, query the events table with the provided code
+      // Use the proper syntax for the exact code match
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('*')
-        .eq('code', eventCode.trim());
+        .eq('code', eventCode.trim())
+        .maybeSingle();
 
       if (eventError) {
         console.error("Error fetching event:", eventError);
@@ -44,13 +46,13 @@ const JoinEventForm = () => {
 
       console.log("Event data response:", eventData);
       
-      // Check if any events were found
-      if (!eventData || eventData.length === 0) {
+      // Check if the event was found
+      if (!eventData) {
         throw new Error('Event not found. Please check the code and try again.');
       }
 
-      // Use the first event that matches
-      const event = eventData[0];
+      // Use the event that matches
+      const event = eventData;
       console.log("Found event:", event);
 
       const { data: userData, error: userError } = await supabase.auth.getUser();
