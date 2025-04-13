@@ -300,8 +300,8 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
   try {
     console.log("[client] Starting profile embedding generation for user:", userId, "in event:", eventId);
     
-    // Check if the profile exists and create it if it doesn't
-    const { data: profileData, error: profileError } = await supabase
+    // Check if the profile exists
+    let { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
@@ -313,6 +313,7 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       throw profileError;
     }
     
+    // If profile doesn't exist, create a minimal one
     if (!profileData) {
       console.log("[client] Profile not found, attempting to create a minimal profile");
       
@@ -363,7 +364,7 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       
       console.log("[client] Successfully created minimal profile:", newProfile);
       
-      // Use the newly created profile
+      // Use the newly created profile by reassigning to let variable
       profileData = newProfile;
     }
     
