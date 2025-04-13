@@ -34,6 +34,22 @@ export const createEvent = async (eventName: string, userId: string) => {
     
     if (eventError) throw eventError;
     
+    // Create Pinecone index for the event
+    const { data: indexData, error: indexError } = await supabase.functions.invoke('create-pinecone-index', {
+      body: {
+        eventId: event.id,
+        eventName: event.name,
+        eventCode: event.code
+      }
+    });
+    
+    if (indexError) {
+      console.error("Error creating Pinecone index:", indexError);
+      // Continue anyway, as the event was created successfully
+    } else {
+      console.log("Pinecone index created:", indexData);
+    }
+    
     return { success: true, event };
   } catch (error) {
     console.error("Error creating event:", error);
@@ -97,6 +113,19 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
     
     if (!profileData) {
       throw new Error("Profile not found");
+    }
+    
+    // Get event data to confirm the Pinecone index exists
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('pinecone_index')
+      .eq('id', eventId)
+      .single();
+      
+    if (eventError) throw eventError;
+    
+    if (!eventData.pinecone_index) {
+      console.warn(`No Pinecone index found for event ${eventId}, will attempt to create one`);
     }
     
     // Call the generate-embedding function

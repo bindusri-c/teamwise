@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Tables } from '@/integrations/supabase/types';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Linkedin, User, Eye } from 'lucide-react';
+import { Linkedin, User, Eye, RefreshCw } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 type Event = Tables<'events'> & {
@@ -30,6 +30,7 @@ const EventsList = () => {
   const [profiles, setProfiles] = useState<Record<string, Profile[]>>({});
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { userId } = useCurrentUser();
@@ -155,6 +156,72 @@ const EventsList = () => {
       .slice(0, 2);
   };
 
+  const generateProfileEmbedding = async (eventId: string) => {
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "User ID not found. Please try logging in again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingEmbedding(eventId);
+
+    try {
+      // 1. Get the user's profile for this event
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .eq('event_id', eventId)
+        .single();
+
+      if (profileError) {
+        throw new Error("Profile not found. Please complete your registration first.");
+      }
+
+      // 2. Get the Pinecone index name from the event
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .select('pinecone_index')
+        .eq('id', eventId)
+        .single();
+
+      if (eventError || !event.pinecone_index) {
+        throw new Error("Event's Pinecone index not found. Please contact support.");
+      }
+
+      // 3. Call the generate-embedding function
+      const { data, error } = await supabase.functions.invoke('generate-embedding', {
+        body: { userId, eventId, profileData: profile }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Success",
+        description: "Your profile embedding has been generated successfully.",
+        variant: "default",
+      });
+
+      // Refresh the profiles after generating embedding
+      fetchEvents();
+
+    } catch (error: any) {
+      console.error('Error generating profile embedding:', error);
+      toast({
+        title: "Error",
+        description: error.message || "There was an error generating your profile embedding",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingEmbedding(null);
+    }
+  };
+
   if (isLoading) {
     return <div className="flex justify-center p-4">Loading events...</div>;
   }
@@ -188,30 +255,58 @@ const EventsList = () => {
               <div className="text-sm">
                 <p><strong>Event Code:</strong> {event.code}</p>
                 <p><strong>Created:</strong> {new Date(event.created_at).toLocaleDateString()}</p>
+                {event.pinecone_index && (
+                  <p><strong>Pinecone Index:</strong> {event.pinecone_index}</p>
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex justify-between flex-wrap gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => viewEventForm(event.id)}
-              >
-                {profiles[event.id]?.some(p => p.id === userId) 
-                  ? "Update Profile" 
-                  : "Complete Registration"}
-              </Button>
-              <Button 
-                variant="secondary"
-                onClick={() => toggleEventMembers(event.id)}
-              >
-                {selectedEvent === event.id ? "Hide Members" : "View Members"}
-              </Button>
-              <Button 
-                variant="default"
-                onClick={() => viewEventDetails(event.id)}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                View Event
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => viewEventForm(event.id)}
+                >
+                  {profiles[event.id]?.some(p => p.id === userId) 
+                    ? "Update Profile" 
+                    : "Complete Registration"}
+                </Button>
+                
+                {profiles[event.id]?.some(p => p.id === userId) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => generateProfileEmbedding(event.id)}
+                    disabled={isGeneratingEmbedding === event.id}
+                  >
+                    {isGeneratingEmbedding === event.id ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate Embedding
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  variant="secondary"
+                  onClick={() => toggleEventMembers(event.id)}
+                >
+                  {selectedEvent === event.id ? "Hide Members" : "View Members"}
+                </Button>
+                <Button 
+                  variant="default"
+                  onClick={() => viewEventDetails(event.id)}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  View Event
+                </Button>
+              </div>
             </CardFooter>
             
             {selectedEvent === event.id && (
