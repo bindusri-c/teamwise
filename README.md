@@ -1,13 +1,13 @@
 
-# RAG Verse Journey
+# MeetWise
 
 ## Project Overview
 
-RAG Verse Journey is an innovative platform designed to help participants connect during events like datathons, hackathons, and collaborative gatherings. By leveraging AI-powered profile embeddings, the application enables intelligent participant matching based on skills, interests, and background.
+MeetWise is an innovative platform designed to help participants connect during events like datathons, hackathons, and collaborative gatherings. By leveraging AI-powered profile embeddings, the application enables intelligent participant matching based on skills, interests, and background.
 
 ## Key Features
 
-- AI-powered profile matching
+- AI-powered participant matching
 - Intelligent embedding generation
 - Event participation tracking
 - Profile creation and management
@@ -25,7 +25,7 @@ Before you begin, ensure you have the following installed:
 
 ```sh
 git clone <YOUR_PROJECT_REPOSITORY_URL>
-cd rag-verse-journey
+cd meetwise
 ```
 
 ### 2. Install Dependencies
@@ -87,4 +87,3 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 Your Name - [Your Email or Social Media]
 Project Link: https://lovable.dev/projects/4934a3ec-5950-4df3-9274-e548015252ac
-```
