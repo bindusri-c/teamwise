@@ -57,14 +57,22 @@ const CreateEventForm = () => {
         
         try {
           console.log("[CreateEvent] Calling generateProfileEmbedding with userId:", userId, "and eventId:", event.id);
-          const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
+          // Add a slight delay to ensure the profile has been created first
+          setTimeout(async () => {
+            try {
+              const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
+              
+              if (embedSuccess) {
+                console.log("[CreateEvent] Successfully verified embedding generation for the new event");
+              } else {
+                console.error("[CreateEvent] Error explicitly generating embedding for new event:", embedError);
+                // Continue anyway since we want the event creation to succeed even if embedding fails
+              }
+            } catch (delayedEmbedError) {
+              console.error("[CreateEvent] Exception in delayed embedding generation:", delayedEmbedError);
+            }
+          }, 500); // Small delay to ensure profile creation completes first
           
-          if (embedSuccess) {
-            console.log("[CreateEvent] Successfully verified embedding generation for the new event");
-          } else {
-            console.error("[CreateEvent] Error explicitly generating embedding for new event:", embedError);
-            // Continue anyway since we want the event creation to succeed even if embedding fails
-          }
         } catch (embedError) {
           console.error("[CreateEvent] Exception explicitly generating embedding for new event:", embedError);
           // Continue anyway

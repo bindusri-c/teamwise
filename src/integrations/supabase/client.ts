@@ -300,7 +300,7 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
   try {
     console.log("[client] Starting profile embedding generation for user:", userId, "in event:", eventId);
     
-    // Get profile data
+    // Check if the profile exists and create it if it doesn't
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('*')
@@ -314,8 +314,57 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
     }
     
     if (!profileData) {
-      console.error("[client] Profile not found for embedding generation");
-      throw new Error("Profile not found");
+      console.log("[client] Profile not found, attempting to create a minimal profile");
+      
+      // Get user data
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error("[client] Error fetching user data:", userError);
+        throw new Error("Unable to fetch user data for profile creation");
+      }
+      
+      // Try to get profile from another event first
+      const { data: otherProfile, error: otherProfileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .limit(1)
+        .maybeSingle();
+      
+      // Create a minimal profile
+      const minimalProfile = {
+        id: userId,
+        event_id: eventId,
+        email: userData?.user?.email || '',
+        name: otherProfile?.name || userData?.user?.email?.split('@')[0] || 'User',
+        // Copy other fields from the existing profile if available
+        age: otherProfile?.age || null,
+        gender: otherProfile?.gender || null,
+        hobbies: otherProfile?.hobbies || null,
+        skills: otherProfile?.skills || [],
+        interests: otherProfile?.interests || [],
+        about_you: otherProfile?.about_you || null,
+        linkedin_url: otherProfile?.linkedin_url || null
+      };
+      
+      console.log("[client] Creating minimal profile:", minimalProfile);
+      
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .upsert(minimalProfile)
+        .select()
+        .single();
+      
+      if (createError) {
+        console.error("[client] Error creating minimal profile:", createError);
+        throw createError;
+      }
+      
+      console.log("[client] Successfully created minimal profile:", newProfile);
+      
+      // Use the newly created profile
+      profileData = newProfile;
     }
     
     console.log("[client] Profile data fetched for embedding generation:", profileData);
@@ -339,7 +388,13 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
     console.log(`[client] Using Pinecone index name for event ${eventId}: ${indexName}`);
     
     // Call the generate-embedding function
-    console.log("[client] Calling generate-embedding edge function");
+    console.log("[client] Calling generate-embedding edge function with this data:", {
+      userId, 
+      eventId, 
+      profileData,
+      pineconeIndex: indexName
+    });
+    
     const { data, error } = await supabase.functions.invoke('generate-embedding', {
       body: { 
         userId, 

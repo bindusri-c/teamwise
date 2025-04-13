@@ -60,15 +60,23 @@ const JoinEventForm = () => {
       if (event?.id) {
         console.log("[JoinEvent] Generating embedding for user after joining event");
         try {
-          console.log("[JoinEvent] Calling generateProfileEmbedding with userId:", userId, "and eventId:", event.id);
-          const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
+          console.log("[JoinEvent] Calling generateProfileEmbedding manually with userId:", userId, "and eventId:", event.id);
+          // Add a slight delay to ensure the profile has been created first
+          setTimeout(async () => {
+            try {
+              const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
+              
+              if (embedSuccess) {
+                console.log("[JoinEvent] Successfully generated embedding after joining event");
+              } else {
+                console.error("[JoinEvent] Error generating embedding after joining event:", embedError);
+                // Continue anyway since we want the user to join the event even if embedding fails
+              }
+            } catch (delayedEmbedError) {
+              console.error("[JoinEvent] Exception in delayed embedding generation:", delayedEmbedError);
+            }
+          }, 500); // Small delay to ensure profile creation completes first
           
-          if (embedSuccess) {
-            console.log("[JoinEvent] Successfully generated embedding after joining event");
-          } else {
-            console.error("[JoinEvent] Error generating embedding after joining event:", embedError);
-            // Continue anyway since we want the user to join the event even if embedding fails
-          }
         } catch (embedError) {
           console.error("[JoinEvent] Exception generating embedding after joining event:", embedError);
           // Continue anyway since we want the user to join the event even if embedding fails
