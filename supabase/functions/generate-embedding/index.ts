@@ -216,7 +216,8 @@ async function storeEmbeddingInPinecone(
   userId: string, 
   eventId: string, 
   profile: Profile, 
-  embedding: number[]
+  embedding: number[],
+  explicitIndexName?: string
 ): Promise<void> {
   try {
     if (!pineconeApiKey || !pineconeEnvironment) {
@@ -224,24 +225,31 @@ async function storeEmbeddingInPinecone(
       return;
     }
 
-    // Get the event info to find the pinecone index name
-    const { data: eventData, error: eventError } = await supabase
-      .from('events')
-      .select('pinecone_index')
-      .eq('id', eventId)
-      .single();
+    // Use explicitly provided index name if available
+    let indexName = explicitIndexName;
     
-    if (eventError) {
-      console.error(`Error fetching event data: ${eventError.message}`);
+    // If no explicit index name is provided, try to get it from the event
+    if (!indexName) {
+      const { data: eventData, error: eventError } = await supabase
+        .from('events')
+        .select('name')
+        .eq('id', eventId)
+        .single();
+      
+      if (eventError) {
+        console.error(`Error fetching event data: ${eventError.message}`);
+        return;
+      }
+      
+      // Generate the index name from the event name
+      indexName = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+    }
+    
+    if (!indexName) {
+      console.error(`No Pinecone index name could be determined for event ${eventId}`);
       return;
     }
     
-    if (!eventData || !eventData.pinecone_index) {
-      console.error(`No Pinecone index found for event ${eventId}`);
-      return;
-    }
-    
-    const indexName = eventData.pinecone_index;
     console.log(`Using Pinecone index: ${indexName} for event ${eventId}`);
 
     // Create metadata for the vector
@@ -260,7 +268,7 @@ async function storeEmbeddingInPinecone(
       linkedin_url: profile.linkedin_url || null
     };
 
-    // Updated Pinecone URL format - now using the event-specific index
+    // Updated Pinecone URL format - using the provided index name
     const pineconeUrl = `https://${indexName}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
     
     // Simplified body with single vector
@@ -307,7 +315,7 @@ Deno.serve(async (req) => {
 
   try {
     // Parse the request body
-    const { userId, eventId, profileData } = await req.json() as RequestBody
+    const { userId, eventId, profileData, pineconeIndex } = await req.json()
 
     if (!userId || !eventId || !profileData) {
       return new Response(
@@ -320,6 +328,9 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Processing profile embedding for user: ${userId}, event: ${eventId}`)
+    if (pineconeIndex) {
+      console.log(`Using explicitly provided Pinecone index: ${pineconeIndex}`)
+    }
 
     // Create text representation for embedding (now with resume content)
     const textForEmbedding = await createEmbeddingText(profileData)
@@ -345,8 +356,8 @@ Deno.serve(async (req) => {
 
     console.log(`Successfully stored embedding in Supabase for user: ${userId}, event: ${eventId}`)
     
-    // Also store the embedding in Pinecone
-    await storeEmbeddingInPinecone(userId, eventId, profileData, embedding)
+    // Also store the embedding in Pinecone, using the explicitly provided index if available
+    await storeEmbeddingInPinecone(userId, eventId, profileData, embedding, pineconeIndex)
 
     // Return success response
     return new Response(

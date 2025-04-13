@@ -37,7 +37,8 @@ const EventForm = () => {
     validateForm,
     isSubmitting,
     setIsSubmitting,
-    generateEmbedding
+    generateEmbedding,
+    ensureUserEnrolled
   } = useProfileForm(eventId);
 
   useEffect(() => {
@@ -118,6 +119,12 @@ const EventForm = () => {
     setIsSubmitting(true);
     
     try {
+      const { success: enrollSuccess, error: enrollError } = await ensureUserEnrolled(userId, eventId);
+      
+      if (!enrollSuccess) {
+        throw enrollError || new Error("Failed to enroll in event");
+      }
+      
       const profileData = {
         id: userId,
         event_id: eventId,
@@ -192,11 +199,32 @@ const EventForm = () => {
         }
       }
       
-      await generateEmbedding(userId, eventId);
+      const { data: updatedProfileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .eq('event_id', eventId)
+        .single();
+        
+      if (profileError) throw profileError;
+      
+      const { success: embeddingSuccess, error: embeddingError } = 
+        await generateEmbedding(userId, eventId, updatedProfileData);
+      
+      if (!embeddingSuccess) {
+        console.error("Error generating profile embedding:", embeddingError);
+        toast({
+          title: "Warning",
+          description: "Profile saved but embedding generation failed. Some features may be limited.",
+          variant: "destructive",
+        });
+      } else {
+        console.log("Profile embedding generated successfully");
+      }
       
       toast({
         title: "Success",
-        description: "Your profile has been saved",
+        description: "Your profile has been saved and you've been registered for the event",
         variant: "default",
       });
       

@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Tables } from '@/integrations/supabase/types';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Linkedin, User, Eye, RefreshCw } from 'lucide-react';
+import { Linkedin, User, Eye } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 type Event = Tables<'events'> & {
@@ -31,7 +31,6 @@ const EventsList = () => {
   const [profiles, setProfiles] = useState<Record<string, Profile[]>>({});
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { userId } = useCurrentUser();
@@ -162,81 +161,6 @@ const EventsList = () => {
     return `evt-${event.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
   };
 
-  const generateProfileEmbedding = async (eventId: string) => {
-    if (!userId) {
-      toast({
-        title: "Error",
-        description: "User ID not found. Please try logging in again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsGeneratingEmbedding(eventId);
-
-    try {
-      // 1. Get the user's profile for this event
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .eq('event_id', eventId)
-        .single();
-
-      if (profileError) {
-        throw new Error("Profile not found. Please complete your registration first.");
-      }
-
-      // 2. Get the event to calculate the Pinecone index name
-      const { data: event, error: eventError } = await supabase
-        .from('events')
-        .select('name')
-        .eq('id', eventId)
-        .single();
-
-      if (eventError) {
-        throw new Error("Event not found. Please contact support.");
-      }
-
-      // 3. Calculate the Pinecone index name using the same function as create-pinecone-index
-      const pineconeIndex = getPineconeIndexName({...event, is_creator: false});
-      console.log(`Using Pinecone index: ${pineconeIndex} for event ${eventId}`);
-
-      // 3. Call the generate-embedding function
-      const { data, error } = await supabase.functions.invoke('generate-embedding', {
-        body: { 
-          userId, 
-          eventId, 
-          profileData: profile,
-          pineconeIndex: pineconeIndex 
-        }
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: "Your profile embedding has been generated successfully.",
-        variant: "default",
-      });
-
-      // Refresh the profiles after generating embedding
-      fetchEvents();
-
-    } catch (error: any) {
-      console.error('Error generating profile embedding:', error);
-      toast({
-        title: "Error",
-        description: error.message || "There was an error generating your profile embedding",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingEmbedding(null);
-    }
-  };
-
   if (isLoading) {
     return <div className="flex justify-center p-4">Loading events...</div>;
   }
@@ -283,26 +207,6 @@ const EventsList = () => {
                     ? "Update Profile" 
                     : "Complete Registration"}
                 </Button>
-                
-                {profiles[event.id]?.some(p => p.id === userId) && (
-                  <Button
-                    variant="outline"
-                    onClick={() => generateProfileEmbedding(event.id)}
-                    disabled={isGeneratingEmbedding === event.id}
-                  >
-                    {isGeneratingEmbedding === event.id ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Regenerate Embedding
-                      </>
-                    )}
-                  </Button>
-                )}
               </div>
               
               <div className="flex gap-2">

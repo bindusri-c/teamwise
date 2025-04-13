@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { supabase, generateProfileEmbedding } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { EventFormData } from '@/types/eventForm';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/use-toast';
@@ -136,23 +136,83 @@ export const useProfileForm = (eventId?: string) => {
     return Object.keys(errors).length === 0;
   };
 
-  // Add a function to generate embedding after profile update
-  const generateEmbedding = async (userId: string, eventId: string) => {
+  // Function to generate embedding after profile update
+  const generateEmbedding = async (userId: string, eventId: string, profileData: any) => {
     try {
-      const { success, error } = await generateProfileEmbedding(userId, eventId);
-      
-      if (!success) {
-        console.error("Error generating profile embedding:", error);
-        toast({
-          title: "Warning",
-          description: "Profile saved but embedding generation failed. Some features may be limited.",
-          variant: "destructive",
-        });
-      } else {
-        console.log("Profile embedding generated successfully");
+      // Get the event name to calculate Pinecone index name
+      const { data: eventData, error: eventError } = await supabase
+        .from('events')
+        .select('name')
+        .eq('id', eventId)
+        .single();
+        
+      if (eventError) {
+        console.error('Error fetching event:', eventError);
+        return { success: false, error: eventError };
       }
+      
+      // Generate Pinecone index name using the same format as in other places
+      const indexName = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+      
+      console.log(`Generating embedding with Pinecone index: ${indexName}`);
+      
+      // Call the generate-embedding edge function
+      const { data, error } = await supabase.functions.invoke('generate-embedding', {
+        body: { 
+          userId, 
+          eventId, 
+          profileData, 
+          pineconeIndex: indexName
+        }
+      });
+      
+      if (error) {
+        console.error('Error generating embedding:', error);
+        return { success: false, error };
+      }
+      
+      return { success: true, data };
     } catch (error) {
       console.error("Error calling generate embedding function:", error);
+      return { success: false, error };
+    }
+  };
+  
+  // Function to ensure user is enrolled in the event
+  const ensureUserEnrolled = async (userId: string, eventId: string) => {
+    try {
+      // Check if the user is already enrolled
+      const { data: existingParticipant, error: checkError } = await supabase
+        .from('participants')
+        .select('*')
+        .eq('event_id', eventId)
+        .eq('user_id', userId)
+        .maybeSingle();
+        
+      if (checkError) {
+        console.error('Error checking participant:', checkError);
+        return { success: false, error: checkError };
+      }
+      
+      // If not already enrolled, add them as a participant
+      if (!existingParticipant) {
+        const { error: insertError } = await supabase
+          .from('participants')
+          .insert({
+            event_id: eventId,
+            user_id: userId
+          });
+          
+        if (insertError) {
+          console.error('Error adding participant:', insertError);
+          return { success: false, error: insertError };
+        }
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error("Error enrolling user in event:", error);
+      return { success: false, error };
     }
   };
 
@@ -171,6 +231,7 @@ export const useProfileForm = (eventId?: string) => {
     validateForm,
     isSubmitting,
     setIsSubmitting,
-    generateEmbedding
+    generateEmbedding,
+    ensureUserEnrolled
   };
 };
