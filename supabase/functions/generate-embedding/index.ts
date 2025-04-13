@@ -23,6 +23,7 @@ interface RequestBody {
   userId: string;
   eventId: string;
   profileData: Profile;
+  pineconeIndex?: string;
 }
 
 // Supabase client setup with explicit types
@@ -36,6 +37,9 @@ const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
 const pineconeProjectId = Deno.env.get('PINECONE_PROJECT_ID') as string
 const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
 const pineconeIndexName = Deno.env.get('PINECONE_INDEX_NAME') || 'profiles'
+
+// Expected dimension for Pinecone index (Gemini embedding-001 produces 768-dimensional vectors)
+const EXPECTED_DIMENSION = 768;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -192,10 +196,17 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
       
       // Return the embedding values
       if (data && data.embedding && data.embedding.values) {
-        console.log(`Successfully generated embedding with dimension: ${data.embedding.values.length}`)
-        return data.embedding.values
+        const embeddingValues = data.embedding.values;
+        console.log(`Successfully generated embedding with dimension: ${embeddingValues.length}`)
+        
+        // Verify the embedding dimension matches the expected dimension for Pinecone
+        if (embeddingValues.length !== EXPECTED_DIMENSION) {
+          console.warn(`WARNING: Embedding dimension (${embeddingValues.length}) does not match expected dimension (${EXPECTED_DIMENSION}) for Pinecone`);
+        }
+        
+        return embeddingValues;
       } else {
-        console.error('Unexpected response format from Gemini API:', JSON.stringify(data))
+        console.error('Unexpected response format from Gemini API:', JSON.stringify(data).substring(0, 500))
         throw new Error('Invalid embedding response format from Gemini API')
       }
     } catch (error) {
@@ -260,21 +271,17 @@ async function storeEmbeddingInPinecone(
       event_id: eventId,
       name: profile.name,
       email: profile.email,
-      age: profile.age?.toString() || null,
-      gender: profile.gender || null,
-      hobbies: profile.hobbies || null,
       skills: profile.skills?.join(", ") || null,
       interests: profile.interests?.join(", ") || null,
-      about_you: profile.about_you ? profile.about_you.substring(0, 1000) : null,
-      linkedin_url: profile.linkedin_url || null
+      about_you: profile.about_you ? profile.about_you.substring(0, 500) : null,
     };
 
-    // FIXED: Updated Pinecone URL format with projectId included
+    // Properly formatted Pinecone URL with projectId
     const pineconeUrl = `https://${indexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
     
     console.log(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
     
-    // Simplified body with single vector
+    // Format the payload exactly according to Pinecone API requirements
     const body = {
       vectors: [
         {
@@ -285,7 +292,15 @@ async function storeEmbeddingInPinecone(
       ]
     };
 
-    console.log(`Storing embedding in Pinecone for user ${userId} in event ${eventId} using index ${indexName}`);
+    // Log the payload for debugging (without the full values array)
+    const debugPayload = {
+      ...body,
+      vectors: [{
+        ...body.vectors[0],
+        values: `[Array of ${embedding.length} values]`
+      }]
+    };
+    console.log(`Pinecone upsert payload:`, JSON.stringify(debugPayload, null, 2));
     
     const response = await fetch(pineconeUrl, {
       method: 'POST',
@@ -299,10 +314,11 @@ async function storeEmbeddingInPinecone(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Error from Pinecone: ${response.status} ${errorText}`);
-      throw new Error(`Pinecone upsert failed: ${response.status}`);
+      throw new Error(`Pinecone upsert failed: ${response.status} ${errorText}`);
     }
 
-    console.log(`Successfully stored embedding in Pinecone for user: ${userId}, event: ${eventId}`);
+    const responseData = await response.json();
+    console.log(`Successfully stored embedding in Pinecone. Response:`, responseData);
   } catch (error) {
     console.error('Error storing embedding in Pinecone:', error);
     // Don't throw the error - we want to continue even if Pinecone storage fails
@@ -318,7 +334,7 @@ Deno.serve(async (req) => {
 
   try {
     // Parse the request body
-    const { userId, eventId, profileData, pineconeIndex } = await req.json()
+    const { userId, eventId, profileData, pineconeIndex } = await req.json() as RequestBody;
 
     if (!userId || !eventId || !profileData) {
       return new Response(
@@ -340,6 +356,9 @@ Deno.serve(async (req) => {
     
     // Generate embedding using Gemini API with retries
     const embedding = await generateEmbedding(textForEmbedding)
+    
+    // Log the embedding length to check dimensions
+    console.log(`Generated embedding with length: ${embedding.length}`);
     
     // Store the embedding as a JSON string in the database
     // Also update the updated_at timestamp

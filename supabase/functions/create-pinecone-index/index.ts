@@ -16,6 +16,10 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
 // Pinecone configuration
 const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
 const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
+const pineconeProjectId = Deno.env.get('PINECONE_PROJECT_ID') as string
+
+// Set dimension for Gemini embedding-001 model (produces 768-dimensional vectors)
+const EMBEDDING_DIMENSION = 768;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -59,6 +63,13 @@ Deno.serve(async (req) => {
     
     // Add a prefix to ensure we don't have name collisions
     indexName = `evt-${indexName}`;
+    
+    console.log(`Using index name: ${indexName}, dimension: ${EMBEDDING_DIMENSION}`);
+    
+    if (!pineconeApiKey || !pineconeProjectId || !pineconeEnvironment) {
+      console.error('Pinecone configuration is incomplete, missing API key, project ID, or environment');
+      throw new Error('Pinecone configuration is incomplete');
+    }
 
     try {
       // Create Pinecone index using the API
@@ -70,7 +81,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           name: indexName,
-          dimension: 1536, // Standard dimension for most embedding models
+          dimension: EMBEDDING_DIMENSION, // Using Gemini embedding-001 dimension
           metric: 'cosine',
           spec: {
             serverless: {
@@ -81,18 +92,22 @@ Deno.serve(async (req) => {
         }),
       })
 
+      console.log(`Pinecone index creation response status: ${createResponse.status}`);
+      
       if (!createResponse.ok) {
-        const errorData = await createResponse.json()
-        console.error('Pinecone index creation error:', errorData)
+        const errorData = await createResponse.json();
+        console.error('Pinecone index creation error:', errorData);
         
         // Handle case where index might already exist
         if (errorData.error && errorData.error.includes('already exists')) {
-          console.log(`Index ${indexName} already exists, continuing...`)
+          console.log(`Index ${indexName} already exists, continuing...`);
         } else {
-          throw new Error(`Pinecone API error: ${errorData.error || createResponse.statusText}`)
+          throw new Error(`Pinecone API error: ${errorData.error || createResponse.statusText}`);
         }
       } else {
-        console.log(`Successfully created Pinecone index: ${indexName}`)
+        const responseData = await createResponse.json();
+        console.log(`Successfully created Pinecone index: ${indexName}`);
+        console.log(`Pinecone response:`, responseData);
       }
 
       // Store the index name in the events table for future reference
@@ -105,8 +120,8 @@ Deno.serve(async (req) => {
         .eq('id', eventId)
 
       if (updateError) {
-        console.error('Error updating event with pinecone index name:', updateError)
-        throw updateError
+        console.error('Error updating event with pinecone index name:', updateError);
+        throw updateError;
       }
 
       // Return success response
@@ -122,11 +137,11 @@ Deno.serve(async (req) => {
         }
       )
     } catch (error) {
-      console.error('Error creating Pinecone index:', error)
-      throw error
+      console.error('Error creating Pinecone index:', error);
+      throw error;
     }
   } catch (error) {
-    console.error('Error in create-pinecone-index function:', error.message || error)
+    console.error('Error in create-pinecone-index function:', error.message || error);
     
     return new Response(
       JSON.stringify({ error: error.message || 'Unknown error' }),
