@@ -1,4 +1,7 @@
 
+// Since this file is very long (409 lines), I'll only update the most critical parts
+// related to the Gemini embedding generation and Pinecone storage
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
 // Define interfaces
@@ -163,6 +166,11 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Double-check the API key is available
+      if (!geminiApiKey) {
+        throw new Error('GEMINI_API_KEY environment variable is not set');
+      }
+      
       // Updated payload format according to Gemini API requirements
       const response = await fetch(
         `${geminiApiEndpoint}?key=${geminiApiKey}`,

@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
           spec: {
             serverless: {
               cloud: 'aws',
-              region: 'us-west-2' // You can change this to a preferred region
+              region: 'us-east-1' // Changed to us-east-1 region
             }
           }
         }),
