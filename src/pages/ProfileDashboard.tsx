@@ -25,6 +25,7 @@ const ProfileDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingEmbedding, setIsGeneratingEmbedding] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
   
   const [profileData, setProfileData] = useState({
     name: '',
@@ -36,7 +37,6 @@ const ProfileDashboard = () => {
     interests: [] as string[],
     linkedinUrl: '',
     aboutYou: '',
-    lookingFor: '',
     resumeUrl: '',
     imageUrl: ''
   });
@@ -93,7 +93,6 @@ const ProfileDashboard = () => {
             skills: profileData.skills || prev.skills,
             interests: profileData.interests || prev.interests,
             aboutYou: profileData.about_you || prev.aboutYou,
-            lookingFor: profileData.looking_for || prev.lookingFor,
             resumeUrl: profileData.resume_url || prev.resumeUrl,
             imageUrl: profileData.image_url || prev.imageUrl
           }));
@@ -223,7 +222,6 @@ const ProfileDashboard = () => {
         image_url: profileData.imageUrl || "https://placeholder.co/400",
         resume_url: resumeUrl,
         about_you: profileData.aboutYou || null,
-        looking_for: profileData.lookingFor || null,
         skills: profileData.skills.length > 0 ? profileData.skills : null,
         interests: profileData.interests.length > 0 ? profileData.interests : null,
         linkedin_url: profileData.linkedinUrl || null,
@@ -254,7 +252,6 @@ const ProfileDashboard = () => {
               skills: profileData.skills,
               interests: profileData.interests,
               aboutYou: profileData.aboutYou,
-              lookingFor: profileData.lookingFor,
               linkedinUrl: profileData.linkedinUrl
             },
             userId
@@ -403,7 +400,6 @@ const ProfileDashboard = () => {
                   <div className="space-y-4">
                     <ProfileAboutSection
                       aboutYou={profileData.aboutYou}
-                      lookingFor={profileData.lookingFor}
                       onInputChange={handleChange}
                     />
                   </div>

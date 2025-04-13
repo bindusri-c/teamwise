@@ -18,7 +18,6 @@ export const useProfileForm = (eventId?: string) => {
     resume: null,
     additionalFiles: [],
     aboutYou: '',
-    lookingFor: '',
     image: null,
     skills: [],
     interests: [],
@@ -98,8 +97,7 @@ export const useProfileForm = (eventId?: string) => {
             linkedinUrl: profileData.linkedin_url || prev.linkedinUrl,
             skills: profileData.skills || prev.skills,
             interests: profileData.interests || prev.interests,
-            aboutYou: profileData.about_you || prev.aboutYou,
-            lookingFor: profileData.looking_for || prev.lookingFor
+            aboutYou: profileData.about_you || prev.aboutYou
           }));
         }
       }
