@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createEvent } from '@/integrations/supabase/client';
+import { createEvent, generateProfileEmbedding } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,11 +40,33 @@ const CreateEventForm = () => {
     setIsLoading(true);
 
     try {
+      console.log("Starting event creation process for event:", eventName);
+      
       // Use the enhanced createEvent function that handles all four steps
       const { success, event, error } = await createEvent(eventName, userId);
 
       if (!success || error) {
         throw new Error(error?.message || "Failed to create event");
+      }
+      
+      console.log("Event created successfully:", event);
+      
+      // Explicitly verify embedding generation
+      if (event?.id) {
+        console.log("Explicitly checking embedding generation for the new event");
+        try {
+          const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
+          
+          if (embedSuccess) {
+            console.log("Successfully verified embedding generation for the new event");
+          } else {
+            console.error("Error explicitly generating embedding for new event:", embedError);
+            // Continue anyway since we want the event creation to succeed even if embedding fails
+          }
+        } catch (embedError) {
+          console.error("Exception explicitly generating embedding for new event:", embedError);
+          // Continue anyway
+        }
       }
 
       toast({
