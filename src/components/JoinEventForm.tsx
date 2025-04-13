@@ -45,7 +45,7 @@ const JoinEventForm = () => {
     setIsLoading(true);
 
     try {
-      console.log("Attempting to join event with code:", eventCode);
+      console.log("[JoinEvent] Attempting to join event with code:", eventCode, "for user:", userId);
       
       // Use the enhanced joinEvent function that handles all steps
       const { success, event, error: joinError } = await joinEvent(eventCode, userId);
@@ -54,22 +54,23 @@ const JoinEventForm = () => {
         throw new Error(joinError?.message || "Failed to join event");
       }
 
-      console.log("Successfully joined event:", event);
+      console.log("[JoinEvent] Successfully joined event:", event);
       
       // Explicitly generate the embedding after joining the event
       if (event?.id) {
-        console.log("Generating embedding for user after joining event");
+        console.log("[JoinEvent] Generating embedding for user after joining event");
         try {
+          console.log("[JoinEvent] Calling generateProfileEmbedding with userId:", userId, "and eventId:", event.id);
           const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
           
           if (embedSuccess) {
-            console.log("Successfully generated embedding after joining event");
+            console.log("[JoinEvent] Successfully generated embedding after joining event");
           } else {
-            console.error("Error generating embedding after joining event:", embedError);
+            console.error("[JoinEvent] Error generating embedding after joining event:", embedError);
             // Continue anyway since we want the user to join the event even if embedding fails
           }
         } catch (embedError) {
-          console.error("Exception generating embedding after joining event:", embedError);
+          console.error("[JoinEvent] Exception generating embedding after joining event:", embedError);
           // Continue anyway since we want the user to join the event even if embedding fails
         }
       }
@@ -83,7 +84,7 @@ const JoinEventForm = () => {
       setEventCode('');
       navigate(`/event-details/${event?.id}`);
     } catch (error: any) {
-      console.error('Error joining event:', error);
+      console.error('[JoinEvent] Error joining event:', error);
       setError(error.message || "Failed to join event. Please try again.");
       toast({
         title: "Error",

@@ -40,7 +40,7 @@ const CreateEventForm = () => {
     setIsLoading(true);
 
     try {
-      console.log("Starting event creation process for event:", eventName);
+      console.log("[CreateEvent] Starting event creation process for event:", eventName);
       
       // Use the enhanced createEvent function that handles all four steps
       const { success, event, error } = await createEvent(eventName, userId);
@@ -49,22 +49,24 @@ const CreateEventForm = () => {
         throw new Error(error?.message || "Failed to create event");
       }
       
-      console.log("Event created successfully:", event);
+      console.log("[CreateEvent] Event created successfully:", event);
       
       // Explicitly verify embedding generation
       if (event?.id) {
-        console.log("Explicitly checking embedding generation for the new event");
+        console.log("[CreateEvent] Explicitly checking embedding generation for the new event");
+        
         try {
+          console.log("[CreateEvent] Calling generateProfileEmbedding with userId:", userId, "and eventId:", event.id);
           const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
           
           if (embedSuccess) {
-            console.log("Successfully verified embedding generation for the new event");
+            console.log("[CreateEvent] Successfully verified embedding generation for the new event");
           } else {
-            console.error("Error explicitly generating embedding for new event:", embedError);
+            console.error("[CreateEvent] Error explicitly generating embedding for new event:", embedError);
             // Continue anyway since we want the event creation to succeed even if embedding fails
           }
         } catch (embedError) {
-          console.error("Exception explicitly generating embedding for new event:", embedError);
+          console.error("[CreateEvent] Exception explicitly generating embedding for new event:", embedError);
           // Continue anyway
         }
       }
@@ -78,7 +80,7 @@ const CreateEventForm = () => {
       setEventName('');
       navigate('/dashboard');
     } catch (error: any) {
-      console.error('Error creating event:', error);
+      console.error('[CreateEvent] Error creating event:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to create event. Please try again.",

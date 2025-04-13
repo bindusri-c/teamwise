@@ -20,17 +20,17 @@ export const handleSupabaseError = (error: any, defaultMessage = "An error occur
 // Helper function to create a new event
 export const createEvent = async (eventName: string, userId: string) => {
   try {
-    console.log("Starting event creation process for:", eventName, "by user:", userId);
+    console.log("[client] Starting event creation process for:", eventName, "by user:", userId);
     
     // Generate event code using the edge function
     const { data: eventCode, error: codeError } = await supabase.functions.invoke('generate-event-code');
     
     if (codeError) {
-      console.error("Error generating event code:", codeError);
+      console.error("[client] Error generating event code:", codeError);
       throw codeError;
     }
     
-    console.log("Generated event code:", eventCode.code);
+    console.log("[client] Generated event code:", eventCode.code);
     
     // Create event in the database
     const { data: event, error: eventError } = await supabase.from('events').insert({
@@ -40,14 +40,14 @@ export const createEvent = async (eventName: string, userId: string) => {
     }).select().single();
     
     if (eventError) {
-      console.error("Error creating event in database:", eventError);
+      console.error("[client] Error creating event in database:", eventError);
       throw eventError;
     }
     
-    console.log("Created event in database:", event);
+    console.log("[client] Created event in database:", event);
     
     // Create Pinecone index for the event
-    console.log("Attempting to create Pinecone index for event:", event.id);
+    console.log("[client] Attempting to create Pinecone index for event:", event.id);
     const { data: indexData, error: indexError } = await supabase.functions.invoke('create-pinecone-index', {
       body: {
         eventId: event.id,
@@ -57,14 +57,14 @@ export const createEvent = async (eventName: string, userId: string) => {
     });
     
     if (indexError) {
-      console.error("Error creating Pinecone index:", indexError);
+      console.error("[client] Error creating Pinecone index:", indexError);
       // Continue anyway, as the event was created successfully
     } else {
-      console.log("Pinecone index created:", indexData);
+      console.log("[client] Pinecone index created:", indexData);
     }
 
     // Automatically create an entry in the participants table
-    console.log("Adding user as participant for event:", event.id);
+    console.log("[client] Adding user as participant for event:", event.id);
     const { error: participantError } = await supabase
       .from('participants')
       .insert({
@@ -73,11 +73,11 @@ export const createEvent = async (eventName: string, userId: string) => {
       });
     
     if (participantError) {
-      console.error("Error adding user as participant:", participantError);
+      console.error("[client] Error adding user as participant:", participantError);
     }
 
     // Get or create a profile for this user in this event
-    console.log("Checking if user already has a profile for this event");
+    console.log("[client] Checking if user already has a profile for this event");
     const { data: existingProfile, error: profileCheckError } = await supabase
       .from('profiles')
       .select('*')
@@ -86,12 +86,12 @@ export const createEvent = async (eventName: string, userId: string) => {
       .maybeSingle();
     
     if (profileCheckError) {
-      console.error("Error checking existing profile:", profileCheckError);
+      console.error("[client] Error checking existing profile:", profileCheckError);
     }
 
     // If no profile exists yet, try to find profile from another event or create a minimal one
     if (!existingProfile) {
-      console.log("No existing profile found, checking for profiles in other events");
+      console.log("[client] No existing profile found, checking for profiles in other events");
       // First try to get a profile from any other event
       const { data: otherProfile, error: otherProfileError } = await supabase
         .from('profiles')
@@ -101,14 +101,14 @@ export const createEvent = async (eventName: string, userId: string) => {
         .maybeSingle();
       
       if (otherProfileError) {
-        console.error("Error fetching profile from other events:", otherProfileError);
+        console.error("[client] Error fetching profile from other events:", otherProfileError);
       }
 
       // Get user data
       const { data: userData, error: userError } = await supabase.auth.getUser();
       
       if (userError) {
-        console.error("Error fetching user data:", userError);
+        console.error("[client] Error fetching user data:", userError);
       }
 
       // Create a profile using existing data or minimal data if nothing exists
@@ -127,26 +127,34 @@ export const createEvent = async (eventName: string, userId: string) => {
         linkedin_url: otherProfile?.linkedin_url || null
       };
 
-      console.log("Creating new profile for user:", newProfile);
-      const { data: createdProfile, error: createProfileError } = await supabase
-        .from('profiles')
-        .insert(newProfile)
-        .select()
-        .single();
+      console.log("[client] Creating new profile for user:", newProfile);
       
-      if (createProfileError) {
-        console.error("Error creating profile:", createProfileError);
-      } else {
-        console.log("Profile created successfully:", createdProfile);
-        // Generate embedding for the new profile
-        const embedResult = await generateProfileEmbedding(userId, event.id);
-        console.log("Profile embedding generation result:", embedResult);
+      try {
+        // Try to insert the profile, but handle the case where it might already exist
+        const { data: createdProfile, error: createProfileError } = await supabase
+          .from('profiles')
+          .upsert(newProfile)
+          .select()
+          .single();
+        
+        if (createProfileError) {
+          console.error("[client] Error creating/updating profile:", createProfileError);
+        } else {
+          console.log("[client] Profile created/updated successfully:", createdProfile);
+          // Generate embedding for the new profile
+          const embedResult = await generateProfileEmbedding(userId, event.id);
+          console.log("[client] Profile embedding generation result:", embedResult);
+        }
+      } catch (upsertError) {
+        console.error("[client] Exception during profile upsert:", upsertError);
       }
+    } else {
+      console.log("[client] User already has a profile for this event:", existingProfile);
     }
     
     return { success: true, event };
   } catch (error) {
-    console.error("Error creating event:", error);
+    console.error("[client] Error creating event:", error);
     return { success: false, error };
   }
 };
@@ -154,7 +162,7 @@ export const createEvent = async (eventName: string, userId: string) => {
 // Helper function to join an event
 export const joinEvent = async (eventCode: string, userId: string) => {
   try {
-    console.log("Starting process to join event with code:", eventCode, "for user:", userId);
+    console.log("[client] Starting process to join event with code:", eventCode, "for user:", userId);
     
     // Find event by code
     const { data: eventData, error: eventError } = await supabase
@@ -164,11 +172,11 @@ export const joinEvent = async (eventCode: string, userId: string) => {
       .single();
     
     if (eventError) {
-      console.error("Error finding event with code:", eventCode, eventError);
+      console.error("[client] Error finding event with code:", eventCode, eventError);
       throw eventError;
     }
     
-    console.log("Found event:", eventData);
+    console.log("[client] Found event:", eventData);
     
     // Check if user is already a participant
     const { data: existingParticipant, error: participantError } = await supabase
@@ -179,13 +187,13 @@ export const joinEvent = async (eventCode: string, userId: string) => {
       .maybeSingle();
     
     if (participantError) {
-      console.error("Error checking if user is already a participant:", participantError);
+      console.error("[client] Error checking if user is already a participant:", participantError);
       throw participantError;
     }
     
     // If user is not already a participant, add them
     if (!existingParticipant) {
-      console.log("User is not already a participant, adding them now");
+      console.log("[client] User is not already a participant, adding them now");
       const { error: joinError } = await supabase
         .from('participants')
         .insert({
@@ -194,15 +202,15 @@ export const joinEvent = async (eventCode: string, userId: string) => {
         });
       
       if (joinError) {
-        console.error("Error adding user as participant:", joinError);
+        console.error("[client] Error adding user as participant:", joinError);
         throw joinError;
       }
     } else {
-      console.log("User is already a participant in this event");
+      console.log("[client] User is already a participant in this event");
     }
 
     // Check if user already has a profile for this event
-    console.log("Checking if user already has a profile for this event");
+    console.log("[client] Checking if user already has a profile for this event");
     const { data: existingProfile, error: profileCheckError } = await supabase
       .from('profiles')
       .select('*')
@@ -211,12 +219,12 @@ export const joinEvent = async (eventCode: string, userId: string) => {
       .maybeSingle();
     
     if (profileCheckError) {
-      console.error("Error checking existing profile:", profileCheckError);
+      console.error("[client] Error checking existing profile:", profileCheckError);
     }
 
     // If no profile exists yet, try to find profile from another event or create a minimal one
     if (!existingProfile) {
-      console.log("No existing profile found, checking for profiles in other events");
+      console.log("[client] No existing profile found, checking for profiles in other events");
       // First try to get a profile from any other event
       const { data: otherProfile, error: otherProfileError } = await supabase
         .from('profiles')
@@ -226,14 +234,14 @@ export const joinEvent = async (eventCode: string, userId: string) => {
         .maybeSingle();
       
       if (otherProfileError) {
-        console.error("Error fetching profile from other events:", otherProfileError);
+        console.error("[client] Error fetching profile from other events:", otherProfileError);
       }
 
       // Get user data
       const { data: userData, error: userError } = await supabase.auth.getUser();
       
       if (userError) {
-        console.error("Error fetching user data:", userError);
+        console.error("[client] Error fetching user data:", userError);
       }
 
       // Create a profile using existing data or minimal data if nothing exists
@@ -252,28 +260,37 @@ export const joinEvent = async (eventCode: string, userId: string) => {
         linkedin_url: otherProfile?.linkedin_url || null
       };
 
-      console.log("Creating new profile for user:", newProfile);
-      const { data: createdProfile, error: createProfileError } = await supabase
-        .from('profiles')
-        .insert(newProfile)
-        .select()
-        .single();
+      console.log("[client] Creating new profile for user:", newProfile);
       
-      if (createProfileError) {
-        console.error("Error creating profile:", createProfileError);
-      } else {
-        console.log("Profile created successfully:", createdProfile);
-        // Generate embedding for the new profile
-        const embedResult = await generateProfileEmbedding(userId, eventData.id);
-        console.log("Profile embedding generation result:", embedResult);
+      try {
+        // Try to insert the profile, but handle the case where it might already exist
+        const { data: createdProfile, error: createProfileError } = await supabase
+          .from('profiles')
+          .upsert(newProfile, { onConflict: 'id,event_id' })
+          .select()
+          .single();
+        
+        if (createProfileError) {
+          console.error("[client] Error creating/updating profile:", createProfileError);
+        } else {
+          console.log("[client] Profile created/updated successfully:", createdProfile);
+          // Generate embedding for the new profile
+          const embedResult = await generateProfileEmbedding(userId, eventData.id);
+          console.log("[client] Profile embedding generation result:", embedResult);
+        }
+      } catch (upsertError) {
+        console.error("[client] Exception during profile upsert:", upsertError);
       }
     } else {
-      console.log("User already has a profile for this event");
+      console.log("[client] User already has a profile for this event:", existingProfile);
+      // Still regenerate the embedding in case profile data has changed
+      const embedResult = await generateProfileEmbedding(userId, eventData.id);
+      console.log("[client] Profile embedding regeneration result:", embedResult);
     }
     
     return { success: true, event: eventData };
   } catch (error) {
-    console.error("Error joining event:", error);
+    console.error("[client] Error joining event:", error);
     return { success: false, error };
   }
 };
@@ -281,7 +298,7 @@ export const joinEvent = async (eventCode: string, userId: string) => {
 // Helper function to generate embedding for a user profile
 export const generateProfileEmbedding = async (userId: string, eventId: string) => {
   try {
-    console.log("Starting profile embedding generation for user:", userId, "in event:", eventId);
+    console.log("[client] Starting profile embedding generation for user:", userId, "in event:", eventId);
     
     // Get profile data
     const { data: profileData, error: profileError } = await supabase
@@ -289,19 +306,19 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       .select('*')
       .eq('id', userId)
       .eq('event_id', eventId)
-      .single();
+      .maybeSingle();
     
     if (profileError) {
-      console.error("Error fetching profile data for embedding:", profileError);
+      console.error("[client] Error fetching profile data for embedding:", profileError);
       throw profileError;
     }
     
     if (!profileData) {
-      console.error("Profile not found for embedding generation");
+      console.error("[client] Profile not found for embedding generation");
       throw new Error("Profile not found");
     }
     
-    console.log("Profile data fetched for embedding generation:", profileData);
+    console.log("[client] Profile data fetched for embedding generation:", profileData);
     
     // Get event data to determine the Pinecone index name
     const { data: eventData, error: eventError } = await supabase
@@ -311,7 +328,7 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       .single();
       
     if (eventError) {
-      console.error("Error fetching event data for embedding generation:", eventError);
+      console.error("[client] Error fetching event data for embedding generation:", eventError);
       throw eventError;
     }
     
@@ -319,10 +336,10 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
     // Using the same format as in create-pinecone-index function: evt-{sanitized-event-name}
     const indexName = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
     
-    console.log(`Using Pinecone index name for event ${eventId}: ${indexName}`);
+    console.log(`[client] Using Pinecone index name for event ${eventId}: ${indexName}`);
     
     // Call the generate-embedding function
-    console.log("Calling generate-embedding edge function");
+    console.log("[client] Calling generate-embedding edge function");
     const { data, error } = await supabase.functions.invoke('generate-embedding', {
       body: { 
         userId, 
@@ -333,14 +350,14 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
     });
     
     if (error) {
-      console.error("Error invoking generate-embedding function:", error);
+      console.error("[client] Error invoking generate-embedding function:", error);
       throw error;
     }
     
-    console.log("Embedding generation successful:", data);
+    console.log("[client] Embedding generation successful:", data);
     return { success: true, data };
   } catch (error) {
-    console.error("Error generating profile embedding:", error);
+    console.error("[client] Error generating profile embedding:", error);
     return { success: false, error };
   }
 };
