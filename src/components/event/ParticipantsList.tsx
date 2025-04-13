@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import ParticipantCard from './ParticipantCard';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { supabase } from '@/integrations/supabase/client';
 
 type Profile = {
   id: string;
@@ -19,13 +20,66 @@ type Profile = {
 
 interface ParticipantsListProps {
   profiles: Profile[];
+  eventId: string; // Added eventId prop
 }
 
-const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles }) => {
+const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialProfiles, eventId }) => {
   const { userId } = useCurrentUser();
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
+  const [isLoading, setIsLoading] = useState(false);
   
-  // Filter out the current user from the participants list
+  useEffect(() => {
+    if (initialProfiles.length === 0 && eventId) {
+      // If no profiles were passed, fetch them directly
+      fetchProfiles();
+    }
+  }, [eventId, initialProfiles.length]);
+  
+  const fetchProfiles = async () => {
+    if (!eventId) return;
+    
+    setIsLoading(true);
+    try {
+      console.log('Fetching profiles for event:', eventId);
+      
+      // Fetch all profiles for this event
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for')
+        .eq('event_id', eventId);
+        
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        return;
+      }
+      
+      console.log('Profiles fetched:', profilesData?.length, profilesData);
+      
+      if (profilesData) {
+        setProfiles(profilesData);
+      }
+    } catch (error) {
+      console.error('Error in fetching profiles:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Filter out the current user from the participants list only if we want to hide current user
   const filteredProfiles = profiles.filter(profile => profile.id !== userId);
+  
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold">Event Participants</h2>
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">Loading participants...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-6">
