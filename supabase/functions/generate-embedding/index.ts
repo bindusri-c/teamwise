@@ -13,7 +13,6 @@ interface Profile {
   resume_url: string;
   additional_files: string[] | null;
   about_you: string | null;
-  looking_for: string | null;
   skills: string[] | null;
   interests: string[] | null;
   linkedin_url: string | null;
@@ -31,6 +30,11 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
 const geminiApiKey = Deno.env.get('GEMINI_API_KEY') as string
 const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent'
+
+// Pinecone configuration
+const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
+const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
+const pineconeIndexName = Deno.env.get('PINECONE_INDEX_NAME') || 'profiles'
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -97,11 +101,6 @@ async function createEmbeddingText(profile: Profile): Promise<string> {
   // PROFESSIONAL SUMMARY - Heavily weight the "about_you" section as it typically contains the most detailed self-description
   if (profile.about_you) {
     profileText += `About: ${profile.about_you.replace(/\n/g, ' ')}. `;
-  }
-  
-  // GOALS - What they're looking for (heavily weighted)
-  if (profile.looking_for) {
-    profileText += `Looking for: ${profile.looking_for.replace(/\n/g, ' ')}. `;
   }
   
   // SKILLS - Professional capabilities (heavily weighted)
@@ -189,6 +188,71 @@ async function generateEmbedding(text: string): Promise<number[]> {
   }
 }
 
+// New function to store embedding in Pinecone
+async function storeEmbeddingInPinecone(
+  userId: string, 
+  eventId: string, 
+  profile: Profile, 
+  embedding: number[]
+): Promise<void> {
+  try {
+    if (!pineconeApiKey || !pineconeEnvironment) {
+      console.log('Pinecone API key or environment not set, skipping Pinecone storage');
+      return;
+    }
+
+    // Create metadata for the vector
+    const metadata = {
+      user_id: userId,
+      event_id: eventId,
+      name: profile.name,
+      email: profile.email,
+      age: profile.age?.toString() || null,
+      gender: profile.gender || null,
+      hobbies: profile.hobbies || null,
+      skills: profile.skills?.join(", ") || null,
+      interests: profile.interests?.join(", ") || null,
+      about_you: profile.about_you || null,
+      linkedin_url: profile.linkedin_url || null
+    };
+
+    // Build Pinecone upsert payload
+    const pineconeUrl = `https://${pineconeIndexName}-${pineconeEnvironment}.svc.pinecone.io/vectors/upsert`;
+    
+    const body = {
+      vectors: [
+        {
+          id: `${userId}_${eventId}`,
+          values: embedding,
+          metadata
+        }
+      ]
+    };
+
+    console.log(`Storing embedding in Pinecone for user ${userId} in event ${eventId}`);
+    
+    const response = await fetch(pineconeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Api-Key': pineconeApiKey
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error from Pinecone: ${response.status} ${errorText}`);
+      throw new Error(`Pinecone upsert failed: ${response.status}`);
+    }
+
+    console.log(`Successfully stored embedding in Pinecone for user: ${userId}, event: ${eventId}`);
+  } catch (error) {
+    console.error('Error storing embedding in Pinecone:', error);
+    // Don't throw the error - we want to continue even if Pinecone storage fails
+  }
+}
+
 // Main handler function
 Deno.serve(async (req) => {
   // Handle CORS preflight request
@@ -226,11 +290,14 @@ Deno.serve(async (req) => {
       .eq('event_id', eventId)
 
     if (updateError) {
-      console.error('Error storing embedding:', updateError)
+      console.error('Error storing embedding in Supabase:', updateError)
       throw updateError
     }
 
-    console.log(`Successfully stored embedding for user: ${userId}, event: ${eventId}`)
+    console.log(`Successfully stored embedding in Supabase for user: ${userId}, event: ${eventId}`)
+    
+    // Also store the embedding in Pinecone
+    await storeEmbeddingInPinecone(userId, eventId, profileData, embedding)
 
     // Return success response
     return new Response(
