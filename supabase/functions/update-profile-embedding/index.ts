@@ -14,9 +14,41 @@ const handleCors = (req: Request) => {
   }
 };
 
+// Safely log potentially large objects by truncating them
+const safeLog = (message: string, obj?: any) => {
+  try {
+    if (obj) {
+      const stringified = typeof obj === 'string' ? obj : JSON.stringify(obj);
+      const truncated = stringified.length > 1000 ? `${stringified.substring(0, 1000)}... (truncated)` : stringified;
+      console.log(`${message}: ${truncated}`);
+    } else {
+      console.log(message);
+    }
+  } catch (error) {
+    console.log(`${message}: [Error logging object: ${error.message}]`);
+  }
+};
+
+// Helper function to check environment variables
+const checkRequiredEnvVars = () => {
+  const requiredVars = [
+    'GEMINI_API_KEY',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY'
+  ];
+  
+  const missingVars = requiredVars.filter(varName => !Deno.env.get(varName));
+  
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  }
+  
+  safeLog(`All required environment variables are set`);
+};
+
 // Helper function to generate embedding vector using Gemini API with retries
 async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
-  console.log(`Generating embedding for text of length: ${text.length}`);
+  safeLog(`Generating embedding for text of length: ${text.length}`);
   
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
   const geminiApiEndpoint = Deno.env.get("GEMINI_API_ENDPOINT") || 
@@ -36,7 +68,7 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`Attempt ${attempt}: Calling Gemini API for embedding generation`);
+      safeLog(`Attempt ${attempt}: Calling Gemini API for embedding generation`);
       
       // Use Gemini API for embedding generation
       const response = await fetch(
@@ -53,12 +85,12 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
         }
       );
 
-      console.log(`Gemini API response status: ${response.status}`);
+      safeLog(`Gemini API response status: ${response.status}`);
 
       if (response.status === 429 && attempt < maxRetries) {
         // Rate limit hit, implement exponential backoff
         const backoffTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s backoff
-        console.log(`Rate limited. Retrying in ${backoffTime}ms (attempt ${attempt}/${maxRetries})`);
+        safeLog(`Rate limited. Retrying in ${backoffTime}ms (attempt ${attempt}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, backoffTime));
         continue;
       }
@@ -73,10 +105,10 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
       
       // Return the embedding values
       if (data && data.embedding && data.embedding.values) {
-        console.log(`Successfully generated embedding with dimension: ${data.embedding.values.length}`);
+        safeLog(`Successfully generated embedding with dimension: ${data.embedding.values.length}`);
         return data.embedding.values;
       } else {
-        console.error('Unexpected response format from Gemini API:', JSON.stringify(data));
+        console.error('Unexpected response format from Gemini API:', JSON.stringify(data).substring(0, 500));
         throw new Error('Invalid embedding response format from Gemini API');
       }
     } catch (error) {
@@ -95,7 +127,7 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
   throw new Error('Failed to generate embedding after all retry attempts');
 }
 
-// Store embedding in Pinecone
+// Store embedding in Pinecone (optional)
 async function storeEmbeddingInPinecone(userId: string, profileData: any, embedding: number[]): Promise<void> {
   try {
     const pineconeApiKey = Deno.env.get("PINECONE_API_KEY");
@@ -104,7 +136,7 @@ async function storeEmbeddingInPinecone(userId: string, profileData: any, embedd
     const pineconeIndexName = Deno.env.get("PINECONE_INDEX_NAME") || 'profiles';
     
     if (!pineconeApiKey || !pineconeProjectId || !pineconeEnvironment) {
-      console.log('Pinecone configuration incomplete, skipping Pinecone storage');
+      safeLog('Pinecone configuration incomplete, skipping Pinecone storage');
       return;
     }
 
@@ -125,7 +157,7 @@ async function storeEmbeddingInPinecone(userId: string, profileData: any, embedd
     // Format: https://<index-name>-<project-id>.svc.<environment>.pinecone.io/vectors/upsert
     const pineconeUrl = `https://${pineconeIndexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
     
-    console.log(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
+    safeLog(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
     
     const body = {
       vectors: [
@@ -137,7 +169,7 @@ async function storeEmbeddingInPinecone(userId: string, profileData: any, embedd
       ]
     };
 
-    console.log(`Storing embedding in Pinecone for user ${userId}`);
+    safeLog(`Storing embedding in Pinecone for user ${userId}`);
     
     const response = await fetch(pineconeUrl, {
       method: 'POST',
@@ -154,7 +186,7 @@ async function storeEmbeddingInPinecone(userId: string, profileData: any, embedd
       throw new Error(`Pinecone upsert failed: ${response.status}`);
     }
 
-    console.log(`Successfully stored embedding in Pinecone for user: ${userId}`);
+    safeLog(`Successfully stored embedding in Pinecone for user: ${userId}`);
   } catch (error) {
     console.error('Error storing embedding in Pinecone:', error);
     // Don't throw the error - we want to continue even if Pinecone storage fails
@@ -167,7 +199,18 @@ serve(async (req) => {
   if (corsResponse) return corsResponse;
 
   try {
-    console.log("update-profile-embedding function started");
+    safeLog("update-profile-embedding function started");
+    
+    try {
+      // Check required environment variables
+      checkRequiredEnvVars();
+    } catch (envError) {
+      console.error("Environment error:", envError.message);
+      return new Response(
+        JSON.stringify({ error: envError.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Get profile data from request body
     let reqBody;
@@ -183,8 +226,8 @@ serve(async (req) => {
     
     const { profileData, userId } = reqBody;
 
-    console.log(`Processing request for user ID: ${userId}`);
-    console.log("Profile data received:", JSON.stringify(profileData));
+    safeLog(`Processing request for user ID: ${userId}`);
+    safeLog("Profile data received:", profileData);
 
     if (!profileData || !userId) {
       console.error("Missing required data: userId or profileData");
@@ -203,7 +246,7 @@ serve(async (req) => {
       throw new Error("Supabase configuration is incomplete");
     }
     
-    console.log("Creating Supabase client");
+    safeLog("Creating Supabase client");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Create a text representation of the profile for embedding
@@ -217,27 +260,27 @@ serve(async (req) => {
       profileData.age ? profileData.age.toString() : ""
     ].filter(Boolean).join(" ");
 
-    console.log("Profile text for embedding:", profileText);
+    safeLog(`Profile text for embedding: ${profileText.substring(0, 100)}...`);
     
     if (!profileText.trim()) {
-      console.warn("Profile text is empty, using placeholder text");
+      safeLog("Profile text is empty, using placeholder text");
       // Use name as fallback if nothing else is available
       profileText = profileData.name || "User profile";
     }
 
     // Generate embedding from the profile text using Gemini API
-    console.log("Generating embedding...");
+    safeLog("Generating embedding...");
     let embedding;
     try {
       embedding = await generateEmbedding(profileText);
-      console.log("Successfully generated embedding");
+      safeLog("Successfully generated embedding");
     } catch (embeddingError) {
       console.error("Error generating embedding:", embeddingError);
-      // Return partial success - we updated the profile but couldn't generate the embedding
+      // Return error since the embedding generation failed
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: "Profile updated but embedding generation failed", 
+          message: "Failed to generate embedding", 
           error: embeddingError.message 
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -245,32 +288,44 @@ serve(async (req) => {
     }
 
     // Store the embedding in the database
-    console.log("Updating profile with embedding in database");
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        embedding: embedding,
-        // Also update other profile fields
-        name: profileData.name,
-        age: typeof profileData.age === 'string' ? parseInt(profileData.age) : profileData.age,
-        gender: profileData.gender || null,
-        hobbies: profileData.hobbies || null,
-        skills: profileData.skills || [],
-        interests: profileData.interests || [],
-        about_you: profileData.aboutYou || null,
-        linkedin_url: profileData.linkedinUrl || null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId);
+    safeLog("Updating profile with embedding in database");
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          embedding: embedding,
+          // Also update other profile fields
+          name: profileData.name,
+          age: typeof profileData.age === 'string' ? parseInt(profileData.age) : profileData.age,
+          gender: profileData.gender || null,
+          hobbies: profileData.hobbies || null,
+          skills: profileData.skills || [],
+          interests: profileData.interests || [],
+          about_you: profileData.aboutYou || null,
+          linkedin_url: profileData.linkedinUrl || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
 
-    if (error) {
-      console.error("Error updating profile in database:", error);
-      throw error;
+      if (error) {
+        console.error("Error updating profile in database:", error);
+        throw error;
+      }
+    } catch (dbError) {
+      console.error("Database error:", dbError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: "Failed to update profile in database", 
+          error: dbError.message 
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log("Profile updated successfully in database");
+    safeLog("Profile updated successfully in database");
 
-    // Also store the embedding in Pinecone for later retrieval
+    // Also store the embedding in Pinecone for later retrieval (optional)
     try {
       await storeEmbeddingInPinecone(userId, profileData, embedding);
     } catch (pineconeError) {
@@ -278,7 +333,7 @@ serve(async (req) => {
       // Continue execution - Pinecone storage is optional
     }
 
-    console.log("Successfully completed update-profile-embedding function for user:", userId);
+    safeLog("Successfully completed update-profile-embedding function for user:", userId);
 
     return new Response(
       JSON.stringify({ success: true, message: "Profile updated with embedding" }),
