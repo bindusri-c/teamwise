@@ -61,7 +61,8 @@ const JoinEventForm = () => {
             title: "Info",
             description: `You have already joined the event "${eventData.name}"`,
           });
-          navigate('/dashboard');
+          // Still navigate to the event form page
+          navigate(`/event/${eventData.id}`);
           return;
         }
         throw error;
@@ -72,9 +73,9 @@ const JoinEventForm = () => {
         description: `You have successfully joined the event "${eventData.name}"`,
       });
 
-      // Reset form and navigate back to dashboard
+      // Reset form and navigate to the event form page
       setEventCode('');
-      navigate('/dashboard');
+      navigate(`/event/${eventData.id}`);
     } catch (error: any) {
       console.error('Error joining event:', error);
       toast({
