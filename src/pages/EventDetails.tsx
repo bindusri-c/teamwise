@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -69,8 +70,9 @@ const EventDetails = () => {
       if (userId && profilesData.length > 0) {
         await fetchSimilarityScores(profilesData);
       } else {
-        const filteredProfiles = profilesData as ProfileWithSimilarity[];
-        setProfiles(filteredProfiles);
+        // Ensure we're not filtering out the current user here, that should be done in ParticipantsList
+        const initialProfiles = profilesData as ProfileWithSimilarity[];
+        setProfiles(initialProfiles);
       }
     } catch (error: any) {
       console.error('Error fetching event details:', error);
@@ -115,7 +117,7 @@ const EventDetails = () => {
         
         return {
           ...profile,
-          similarity_score: similarityEntry?.similarity_score || 0
+          similarity_score: similarityEntry?.similarity_score
         };
       });
       

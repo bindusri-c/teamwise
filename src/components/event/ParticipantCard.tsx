@@ -43,6 +43,7 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
     return "bg-red-400 text-white";
   };
 
+  // Log the similarity score for debugging
   console.log(`Rendering card for ${profile.name} with similarity score:`, profile.similarity_score);
 
   return (
@@ -126,10 +127,17 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
       </CardContent>
       
       <CardFooter className="bg-muted/30 justify-between">
-        <Badge variant="outline" className="flex items-center gap-1">
-          <Percent className="h-3 w-3" />
-          Match: {profile.similarity_score !== undefined ? formatSimilarityPercentage(profile.similarity_score) : 'N/A'}
-        </Badge>
+        {profile.similarity_score !== undefined ? (
+          <Badge variant="outline" className="flex items-center gap-1">
+            <Percent className="h-3 w-3" />
+            Match: {formatSimilarityPercentage(profile.similarity_score)}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="flex items-center gap-1 text-muted-foreground">
+            <Percent className="h-3 w-3" />
+            Match: N/A
+          </Badge>
+        )}
         
         {profile.linkedin_url ? (
           <a 
