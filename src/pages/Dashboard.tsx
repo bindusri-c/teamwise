@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import DashboardHeader from '@/components/DashboardHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,7 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import CreateEventForm from '@/components/CreateEventForm';
 import JoinEventForm from '@/components/JoinEventForm';
 import EventsList from '@/components/EventsList';
-import { CalendarPlus, UserPlus } from 'lucide-react';
+import { CalendarPlus, UserPlus, User, ExternalLink } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -21,7 +23,16 @@ const Dashboard = () => {
       <DashboardHeader />
       
       <main className="flex-1 container py-8 px-4 md:px-6">
-        <h1 className="text-3xl font-bold mb-6">Welcome, {displayName}</h1>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+          <h1 className="text-3xl font-bold">Welcome, {displayName}</h1>
+          <Link to="/profile">
+            <Button variant="outline" className="flex items-center gap-2">
+              <User size={16} />
+              Manage Profile
+              <ExternalLink size={14} />
+            </Button>
+          </Link>
+        </div>
         
         <div className="grid gap-6 md:grid-cols-3 mb-8">
           <Card className="md:col-span-2">

@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import EventForm from "./pages/EventForm";
 import EventDetails from "./pages/EventDetails";
+import ProfileDashboard from "./pages/ProfileDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <EventDetails />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <ProfileDashboard />
                 </ProtectedRoute>
               } 
             />

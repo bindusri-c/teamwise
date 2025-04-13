@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -536,8 +535,10 @@ const EventForm = () => {
       
       <Card className="max-w-4xl mx-auto">
         <CardHeader>
-          <CardTitle>{event?.name ? `Register for ${event.name}` : 'Event Registration'}</CardTitle>
-          <CardDescription>Please fill out the form below to complete your registration</CardDescription>
+          <CardTitle>{event?.name ? `${event.name} Information` : 'Event Information'}</CardTitle>
+          <CardDescription>
+            This form is currently read-only. Please update your profile information in the Profile Dashboard.
+          </CardDescription>
         </CardHeader>
         
         <form onSubmit={handleSubmit} noValidate>
@@ -777,20 +778,14 @@ const EventForm = () => {
               variant="outline" 
               onClick={() => navigate('/dashboard')}
             >
-              Cancel
+              Back to Dashboard
             </Button>
             <Button 
               type="submit" 
-              disabled={isSubmitting}
+              disabled={true}
+              className="cursor-not-allowed opacity-50"
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                "Submit"
-              )}
+              Form Disabled
             </Button>
           </CardFooter>
         </form>
