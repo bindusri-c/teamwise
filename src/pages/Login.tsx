@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -21,7 +20,6 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Set active tab based on URL parameter
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const tab = searchParams.get('tab');
@@ -30,7 +28,6 @@ const Login = () => {
     }
   }, [location.search]);
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard');
@@ -68,10 +65,8 @@ const Login = () => {
     }
 
     try {
-      // Fix: pass just email and password to signup
       const success = await signup(email, password);
       if (success) {
-        // On successful signup, show success message and switch to login tab
         setActiveTab('login');
         setPassword('');
         toast({
@@ -89,7 +84,6 @@ const Login = () => {
   };
 
   const toast = (props: { title: string; description: string }) => {
-    // Simple alert since we don't have toast in this component
     alert(`${props.title}: ${props.description}`);
   };
 
@@ -104,9 +98,9 @@ const Login = () => {
         
         <Card className="w-full shadow-xl">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center">RAGVerse</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center">MeetWise</CardTitle>
             <CardDescription className="text-center">
-              Your AI-powered knowledge assistant
+              Your AI-powered networking assistant
             </CardDescription>
           </CardHeader>
           

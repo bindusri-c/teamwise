@@ -19,7 +19,7 @@ const DashboardHeader = () => {
       <div className="container flex items-center justify-between h-16 px-4 md:px-6">
         <div className="flex items-center space-x-2">
           <BrainCircuit className="w-6 h-6 text-rag-primary" />
-          <span className="font-bold text-xl">RAGVerse</span>
+          <span className="font-bold text-xl">MeetWise</span>
         </div>
         
         <div className="flex items-center space-x-4">

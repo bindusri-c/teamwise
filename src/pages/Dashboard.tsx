@@ -110,7 +110,7 @@ const Dashboard = () => {
       </main>
       
       <footer className="border-t py-4 px-6 text-center text-sm text-gray-500">
-        RAGVerse © {new Date().getFullYear()} - AI-Powered Knowledge Assistant
+        MeetWise © {new Date().getFullYear()} - AI-Powered Networking Assistant
       </footer>
     </div>
   );
