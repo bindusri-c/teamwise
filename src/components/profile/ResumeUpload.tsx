@@ -10,13 +10,15 @@ interface ResumeUploadProps {
   hasError: boolean;
   errorMessage?: string;
   onResumeChange: (file: File) => void;
+  onParseResume?: (text: string) => void;
 }
 
 const ResumeUpload: React.FC<ResumeUploadProps> = ({
   resumeFileName,
   hasError,
   errorMessage,
-  onResumeChange
+  onResumeChange,
+  onParseResume
 }) => {
   const { toast } = useToast();
   const resumeInputRef = useRef<HTMLInputElement>(null);

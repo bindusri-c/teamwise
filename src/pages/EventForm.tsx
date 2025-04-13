@@ -12,12 +12,6 @@ import AdditionalFilesUpload from '@/components/profile/AdditionalFilesUpload';
 import ProfileBasicInfo from '@/components/profile/ProfileBasicInfo';
 import ProfileAboutSection from '@/components/profile/ProfileAboutSection';
 import TagInput from '@/components/profile/TagInput';
-import { 
-  extractLinkedInUrl, 
-  extractSkills, 
-  extractInterests, 
-  extractParagraph 
-} from '@/utils/resumeParser';
 
 const EventForm = () => {
   const { eventId } = useParams<{ eventId: string }>();
@@ -47,24 +41,6 @@ const EventForm = () => {
     if (formErrors.resume) {
       setFormErrors(prev => ({ ...prev, resume: undefined }));
     }
-  };
-
-  // Handle parsing resume content
-  const handleParseResume = (text: string) => {
-    const extractedData = {
-      skills: extractSkills(text),
-      interests: extractInterests(text),
-      linkedinUrl: extractLinkedInUrl(text) || '',
-      aboutYou: extractParagraph(text, 100)
-    };
-    
-    setFormData(prev => ({
-      ...prev,
-      linkedinUrl: extractedData.linkedinUrl || prev.linkedinUrl,
-      skills: [...new Set([...prev.skills, ...extractedData.skills])],
-      interests: [...new Set([...prev.interests, ...extractedData.interests])],
-      aboutYou: extractedData.aboutYou || prev.aboutYou
-    }));
   };
 
   // Handle additional files upload
@@ -138,7 +114,6 @@ const EventForm = () => {
                   hasError={!!formErrors.resume}
                   errorMessage={formErrors.resume}
                   onResumeChange={handleResumeChange}
-                  onParseResume={handleParseResume}
                 />
                 
                 <AdditionalFilesUpload 
@@ -170,7 +145,6 @@ const EventForm = () => {
             
             <ProfileAboutSection 
               aboutYou={formData.aboutYou}
-              lookingFor={formData.lookingFor}
               onInputChange={handleChange}
             />
           </CardContent>

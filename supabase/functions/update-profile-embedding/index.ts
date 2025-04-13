@@ -41,7 +41,6 @@ serve(async (req) => {
     const profileText = [
       profileData.name,
       profileData.aboutYou,
-      profileData.lookingFor,
       profileData.skills?.join(" "),
       profileData.interests?.join(" "),
       profileData.hobbies,
@@ -81,7 +80,6 @@ serve(async (req) => {
         skills: profileData.skills || [],
         interests: profileData.interests || [],
         about_you: profileData.aboutYou || null,
-        looking_for: profileData.lookingFor || null,
         linkedin_url: profileData.linkedinUrl || null,
         updated_at: new Date().toISOString()
       })

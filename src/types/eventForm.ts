@@ -8,7 +8,6 @@ export interface EventFormData {
   resume: File | null;
   additionalFiles: File[];
   aboutYou: string;
-  lookingFor: string;
   image: File | null;
   skills: string[];
   interests: string[];
