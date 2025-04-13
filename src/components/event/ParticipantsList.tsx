@@ -41,6 +41,7 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
   const fetchProfiles = async () => {
     if (!eventId) {
       console.log('No eventId provided to ParticipantsList, cannot fetch profiles');
+      setIsLoading(false);
       return;
     }
     
@@ -57,6 +58,8 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
         
       if (participantsError) {
         console.error('ParticipantsList: Error fetching participants:', participantsError);
+        setProfiles([]);
+        setIsLoading(false);
         return;
       }
       
@@ -82,6 +85,8 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
         
       if (profilesError) {
         console.error('ParticipantsList: Error fetching profiles:', profilesError);
+        setProfiles([]);
+        setIsLoading(false);
         return;
       }
       
