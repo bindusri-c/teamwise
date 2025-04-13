@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,7 +8,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
-import ProfileSimilarityScore from '@/components/ProfileSimilarityScore';
 import EventHeader from '@/components/event/EventHeader';
 import ParticipantsList from '@/components/event/ParticipantsList';
 
@@ -37,7 +37,6 @@ const EventDetails = () => {
   const [profiles, setProfiles] = useState<ProfileWithSimilarity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreator, setIsCreator] = useState(false);
-  const [loadingSimilarities, setLoadingSimilarities] = useState(false);
   const [regeneratingEmbedding, setRegeneratingEmbedding] = useState(false);
 
   useEffect(() => {
@@ -93,7 +92,6 @@ const EventDetails = () => {
   const fetchExistingSimilarityScores = async (profilesData: Profile[]) => {
     if (!userId || !eventId) return;
     
-    setLoadingSimilarities(true);
     try {      
       // Fetch all similarity scores where the current user is involved
       const { data: similarityData, error: similarityError } = await supabase
@@ -139,8 +137,6 @@ const EventDetails = () => {
       setProfiles(profilesWithSimilarity);
     } catch (error) {
       console.error('Error fetching similarity scores:', error);
-    } finally {
-      setLoadingSimilarities(false);
     }
   };
 
@@ -182,7 +178,7 @@ const EventDetails = () => {
       
       toast({
         title: "Success",
-        description: "Your profile embedding has been regenerated successfully. You can now recalculate similarities.",
+        description: "Your profile embedding has been regenerated successfully.",
         duration: 5000,
       });
       
@@ -253,21 +249,18 @@ const EventDetails = () => {
       
       {userHasProfile && userId && eventId && (
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <ProfileSimilarityScore userId={userId} eventId={eventId} />
-            
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={regenerateEmbedding}
-              disabled={regeneratingEmbedding}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${regeneratingEmbedding ? 'animate-spin' : ''}`} />
-              {regeneratingEmbedding ? 'Regenerating...' : 'Regenerate My Embedding'}
-            </Button>
-          </div>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={regenerateEmbedding}
+            disabled={regeneratingEmbedding}
+            className="mb-2"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${regeneratingEmbedding ? 'animate-spin' : ''}`} />
+            {regeneratingEmbedding ? 'Regenerating...' : 'Regenerate My Embedding'}
+          </Button>
           <p className="text-sm text-muted-foreground">
-            Note: Your embedding now includes text from your uploaded resume for better matching.
+            Your embedding includes text from your uploaded resume for better matching.
           </p>
         </div>
       )}
