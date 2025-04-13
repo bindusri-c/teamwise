@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createEvent, generateProfileEmbedding } from '@/integrations/supabase/client';
+import { createEvent } from '@/integrations/supabase/utils/event-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,7 +42,7 @@ const CreateEventForm = () => {
     try {
       console.log("[CreateEvent] Starting event creation process for event:", eventName);
       
-      // Use the enhanced createEvent function that handles all four steps
+      // Create the event and Pinecone index
       const { success, event, error } = await createEvent(eventName, userId);
 
       if (!success || error) {
@@ -50,34 +50,6 @@ const CreateEventForm = () => {
       }
       
       console.log("[CreateEvent] Event created successfully:", event);
-      
-      // Explicitly verify embedding generation
-      if (event?.id) {
-        console.log("[CreateEvent] Explicitly checking embedding generation for the new event");
-        
-        try {
-          console.log("[CreateEvent] Calling generateProfileEmbedding with userId:", userId, "and eventId:", event.id);
-          // Add a slight delay to ensure the profile has been created first
-          setTimeout(async () => {
-            try {
-              const { success: embedSuccess, error: embedError } = await generateProfileEmbedding(userId, event.id);
-              
-              if (embedSuccess) {
-                console.log("[CreateEvent] Successfully verified embedding generation for the new event");
-              } else {
-                console.error("[CreateEvent] Error explicitly generating embedding for new event:", embedError);
-                // Continue anyway since we want the event creation to succeed even if embedding fails
-              }
-            } catch (delayedEmbedError) {
-              console.error("[CreateEvent] Exception in delayed embedding generation:", delayedEmbedError);
-            }
-          }, 500); // Small delay to ensure profile creation completes first
-          
-        } catch (embedError) {
-          console.error("[CreateEvent] Exception explicitly generating embedding for new event:", embedError);
-          // Continue anyway
-        }
-      }
 
       toast({
         title: "Success",

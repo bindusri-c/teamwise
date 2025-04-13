@@ -4,7 +4,6 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { handleSupabaseError } from './utils/error-utils';
 import { createEvent, joinEvent } from './utils/event-utils';
-import { generateProfileEmbedding } from './utils/profile-utils';
 
 const SUPABASE_URL = "https://tagpzwzxruxxxoldiwtt.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhZ3B6d3p4cnV4eHhvbGRpd3R0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ1MTYxODcsImV4cCI6MjA2MDA5MjE4N30.vyS_a_MAXGwzeUfvmoqMHOI0T5EtZaACoPwSSGbjq4I";
@@ -12,4 +11,4 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 // Re-export the utility functions
-export { handleSupabaseError, createEvent, joinEvent, generateProfileEmbedding };
+export { handleSupabaseError, createEvent, joinEvent };
