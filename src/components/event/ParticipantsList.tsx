@@ -43,6 +43,7 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
       console.log('Fetching profiles for event:', eventId);
       
       // First get all participants for this event
+      console.log('Querying participants table for event_id:', eventId);
       const { data: participantsData, error: participantsError } = await supabase
         .from('participants')
         .select('user_id')
@@ -64,12 +65,13 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
       
       // Get the user IDs from participants
       const userIds = participantsData.map(p => p.user_id);
+      console.log('Extracted user IDs:', userIds);
       
-      // Then fetch profiles for those users in this event
+      // Then fetch profiles for those users
+      console.log('Querying profiles table for users:', userIds);
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for')
-        .eq('event_id', eventId)
         .in('id', userIds);
         
       if (profilesError) {
@@ -80,7 +82,18 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
       console.log('Profiles fetched:', profilesData?.length, profilesData);
       
       if (profilesData) {
+        // Additional logging for each profile
+        profilesData.forEach(profile => {
+          console.log(`Profile ${profile.id} details:`, {
+            name: profile.name,
+            email: profile.email,
+            hasSkills: profile.skills?.length > 0
+          });
+        });
+        
         setProfiles(profilesData);
+      } else {
+        console.log('No profiles data returned from query');
       }
     } catch (error) {
       console.error('Error in fetching profiles:', error);

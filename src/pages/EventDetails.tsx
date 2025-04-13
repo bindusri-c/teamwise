@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase, generateProfileEmbedding } from '@/integrations/supabase/client';
@@ -38,10 +39,19 @@ const EventDetails = () => {
   const [isCreator, setIsCreator] = useState(false);
 
   useEffect(() => {
-    if (eventId && userId) {
+    if (eventId) {
+      console.log('Initial mount - fetching event details for eventId:', eventId);
       fetchEventDetails();
     }
-  }, [eventId, userId]);
+  }, [eventId]);
+
+  useEffect(() => {
+    // This is a safeguard to ensure we try again when userId becomes available
+    if (userId && eventId) {
+      console.log('userId available/changed, fetching event details for:', userId, eventId);
+      fetchEventDetails();
+    }
+  }, [userId, eventId]);
 
   useEffect(() => {
     // Debug output for troubleshooting
@@ -52,7 +62,10 @@ const EventDetails = () => {
   }, [userId, eventId, profiles]);
 
   const fetchEventDetails = async () => {
-    if (!eventId || !userId) return;
+    if (!eventId) {
+      console.log('No eventId provided, cannot fetch event details');
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -64,54 +77,73 @@ const EventDetails = () => {
         .eq('id', eventId)
         .single();
 
-      if (eventError) throw eventError;
+      if (eventError) {
+        console.error('Error fetching event data:', eventError);
+        throw eventError;
+      }
       
       console.log('Event data fetched:', eventData);
       setEvent(eventData);
       
-      setIsCreator(eventData.created_by === userId);
+      // Check if current user is the creator
+      if (userId) {
+        setIsCreator(eventData.created_by === userId);
+        console.log('Is current user the creator?', eventData.created_by === userId);
 
-      // First, ensure the user is enrolled in this event
-      const { data: participantData, error: participantError } = await supabase
-        .from('participants')
-        .select('*')
-        .eq('event_id', eventId)
-        .eq('user_id', userId)
-        .maybeSingle();
-        
-      if (participantError) {
-        console.error('Error checking participant status:', participantError);
-      } else if (!participantData) {
-        console.log('User is not a participant, adding them now');
-        // Add user as participant if not already
-        const { error: addParticipantError } = await supabase
+        // First, ensure the user is enrolled in this event
+        console.log('Checking if user is a participant');
+        const { data: participantData, error: participantError } = await supabase
           .from('participants')
-          .insert({
-            event_id: eventId,
-            user_id: userId
-          });
+          .select('*')
+          .eq('event_id', eventId)
+          .eq('user_id', userId)
+          .maybeSingle();
           
-        if (addParticipantError) {
-          console.error('Error adding user as participant:', addParticipantError);
+        if (participantError) {
+          console.error('Error checking participant status:', participantError);
+        } else {
+          console.log('Participant status:', participantData ? 'Already a participant' : 'Not a participant');
+          
+          if (!participantData) {
+            console.log('User is not a participant, adding them now');
+            // Add user as participant if not already
+            const { error: addParticipantError } = await supabase
+              .from('participants')
+              .insert({
+                event_id: eventId,
+                user_id: userId
+              });
+              
+            if (addParticipantError) {
+              console.error('Error adding user as participant:', addParticipantError);
+            } else {
+              console.log('Successfully added user as participant');
+            }
+          }
         }
-      }
 
-      // Check if the user has a profile for this event
-      const { data: existingProfile, error: profileCheckError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .eq('event_id', eventId)
-        .maybeSingle();
-      
-      if (profileCheckError) {
-        console.error('Error checking for existing profile:', profileCheckError);
-      }
-      
-      // If no profile exists yet, create one
-      if (!existingProfile) {
-        console.log('No profile exists for current user. Creating one now.');
-        await createUserProfile(userId, eventId);
+        // Check if the user has a profile for this event
+        console.log('Checking if user has a profile for this event');
+        const { data: existingProfile, error: profileCheckError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .eq('event_id', eventId)
+          .maybeSingle();
+        
+        if (profileCheckError) {
+          console.error('Error checking for existing profile:', profileCheckError);
+        } else {
+          console.log('Profile check result:', existingProfile ? 'Has profile' : 'No profile');
+        }
+        
+        // If no profile exists yet, create one
+        if (!existingProfile) {
+          console.log('No profile exists for current user. Creating one now.');
+          await createUserProfile(userId, eventId);
+        }
+      } else {
+        console.log('No userId available, skipping creator check and profile creation');
       }
 
       // Then fetch profiles and similarity scores
@@ -134,11 +166,38 @@ const EventDetails = () => {
     if (!eventId) return;
     
     try {
-      // Fetch all profiles for this event
+      console.log('Starting fetchProfiles() for event:', eventId);
+      
+      // First get all participants for this event
+      console.log('Querying participants table for event_id:', eventId);
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('participants')
+        .select('user_id')
+        .eq('event_id', eventId);
+        
+      if (participantsError) {
+        console.error('Error fetching participants:', participantsError);
+        throw participantsError;
+      }
+      
+      console.log('Found participants:', participantsData?.length, participantsData);
+      
+      if (!participantsData || participantsData.length === 0) {
+        console.log('No participants found for event');
+        setProfiles([]);
+        return;
+      }
+      
+      // Get the user IDs from participants
+      const userIds = participantsData.map(p => p.user_id);
+      console.log('Participant user IDs:', userIds);
+      
+      // Fetch profiles for those users
+      console.log('Querying profiles table for user IDs:', userIds);
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for, resume_url')
-        .eq('event_id', eventId);
+        .in('id', userIds);
         
       if (profilesError) {
         console.error('Error fetching profiles:', profilesError);
@@ -151,6 +210,7 @@ const EventDetails = () => {
         await fetchExistingSimilarityScores(profilesData);
       } else {
         // Set profiles to empty array
+        console.log('No profile data returned, setting profiles to empty array');
         setProfiles([]);
       }
     } catch (error) {
@@ -215,6 +275,7 @@ const EventDetails = () => {
       console.log('Profile created successfully:', createdProfile);
       
       // Generate embedding for the new profile
+      console.log('Generating embedding for new profile');
       const embedResult = await generateProfileEmbedding(userId, eventId);
       console.log('Profile embedding generation result:', embedResult);
       
@@ -266,10 +327,12 @@ const EventDetails = () => {
         };
       });
       
+      console.log('Setting profiles with similarity scores:', profilesWithSimilarity);
       setProfiles(profilesWithSimilarity);
     } catch (error) {
       console.error('Error fetching similarity scores:', error);
       // If we can't get similarity scores, still show the profiles
+      console.log('Setting profiles without similarity scores');
       setProfiles(profilesData);
     }
   };
@@ -322,6 +385,7 @@ const EventDetails = () => {
         userHasProfile={true}
       />
       
+      {/* Pass eventId explicitly to ensure ParticipantsList has it */}
       <ParticipantsList profiles={profiles} eventId={eventId as string} />
     </div>
   );
