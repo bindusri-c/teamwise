@@ -26,11 +26,11 @@ interface ParticipantsListProps {
 const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialProfiles, eventId }) => {
   const { userId } = useCurrentUser();
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   useEffect(() => {
     console.log('ParticipantsList mounted with eventId:', eventId);
-    console.log('Initial profiles passed to ParticipantsList:', initialProfiles);
+    console.log('Initial profiles passed to ParticipantsList:', initialProfiles.length, initialProfiles);
     
     // Always fetch profiles when component mounts to ensure we have the latest data
     if (eventId) {
@@ -100,16 +100,17 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
         setProfiles(profilesData);
       } else {
         console.log('ParticipantsList: No profiles data returned from query');
+        setProfiles([]);
       }
     } catch (error) {
       console.error('ParticipantsList: Error in fetching profiles:', error);
+      setProfiles([]);
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Don't filter out the current user - show all participants including the current user
-  // This change ensures that if the current user is a participant, they will be shown in the list
+  // Display all participants without filtering
   
   if (isLoading) {
     return (
