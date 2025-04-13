@@ -105,7 +105,7 @@ const EmbeddingTestButton = () => {
             email: 'test@example.com',
             skills: ['coding', 'testing', 'machine learning'],
             interests: ['AI', 'data science', 'computer vision'],
-            about_you: 'This is a test profile for embedding generation using the new gemini-embedding-exp-03-07 model which produces 3072-dimensional vectors.'
+            about_you: 'This is a test profile for embedding generation using the gemini-1.0-pro-001 model which produces 768-dimensional vectors.'
           });
         
         if (insertError) {
@@ -150,7 +150,7 @@ const EmbeddingTestButton = () => {
       disabled={isLoading || !userId}
       className="bg-rag-primary hover:bg-rag-secondary"
     >
-      {isLoading ? 'Processing...' : 'Test Embedding (gemini-embedding-exp-03-07)'}
+      {isLoading ? 'Processing...' : 'Test Embedding (gemini-1.0-pro-001)'}
     </Button>
   );
 };

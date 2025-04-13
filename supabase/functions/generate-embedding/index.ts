@@ -1,7 +1,3 @@
-
-// Since this file is very long (409 lines), I'll only update the most critical parts
-// related to the Gemini embedding generation and Pinecone storage
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
 // Define interfaces
@@ -33,7 +29,7 @@ interface RequestBody {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
 const geminiApiKey = Deno.env.get('GEMINI_API_KEY') as string
-const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/gemini-embedding-exp-03-07:embedContent'
+const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro-001:embedContent'
 
 // Pinecone configuration
 const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
@@ -41,8 +37,8 @@ const pineconeProjectId = Deno.env.get('PINECONE_PROJECT_ID') as string
 const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
 const pineconeIndexName = Deno.env.get('PINECONE_INDEX_NAME') || 'profiles'
 
-// Expected dimension for Pinecone index (gemini-embedding-exp-03-07 produces 3072-dimensional vectors)
-const EXPECTED_DIMENSION = 3072;
+// Expected dimension for Pinecone index (gemini-1.0-pro-001 produces 768-dimensional vectors)
+const EXPECTED_DIMENSION = 768;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -159,7 +155,7 @@ async function createEmbeddingText(profile: Profile): Promise<string> {
 
 // Updated function to generate embedding vector using Gemini API with retries
 async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
-  console.log(`Generating embedding using gemini-embedding-exp-03-07 model for text of length: ${text.length}`)
+  console.log(`Generating embedding using gemini-1.0-pro-001 model for text of length: ${text.length}`)
   
   // Truncate text if too long (Gemini has token limits)
   const truncatedText = text.length > 2048 ? text.substring(0, 2048) : text
@@ -171,7 +167,7 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
         throw new Error('GEMINI_API_KEY environment variable is not set');
       }
       
-      // Updated payload format according to Gemini API requirements
+      // Payload format for gemini-1.0-pro-001
       const response = await fetch(
         `${geminiApiEndpoint}?key=${geminiApiKey}`,
         {
@@ -180,7 +176,7 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gemini-embedding-exp-03-07',
+            model: 'gemini-1.0-pro-001',
             content: { parts: [{ text: truncatedText }] },
           }),
         }
@@ -252,7 +248,7 @@ async function storeEmbeddingInPinecone(
     if (!indexName) {
       const { data: eventData, error: eventError } = await supabase
         .from('events')
-        .select('name')
+        .select('name, pinecone_index')
         .eq('id', eventId)
         .single();
       
@@ -261,8 +257,9 @@ async function storeEmbeddingInPinecone(
         return;
       }
       
-      // Generate the index name from the event name
-      indexName = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+      // Use the stored pinecone_index if available, otherwise generate it
+      indexName = eventData.pinecone_index || 
+        `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
     }
     
     if (!indexName) {

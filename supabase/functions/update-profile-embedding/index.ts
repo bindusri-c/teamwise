@@ -48,11 +48,11 @@ const checkRequiredEnvVars = () => {
 
 // Helper function to generate embedding vector using Gemini API with retries
 async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
-  safeLog(`Generating embedding using gemini-embedding-exp-03-07 model for text of length: ${text.length}`);
+  safeLog(`Generating embedding using gemini-1.0-pro-001 model for text of length: ${text.length}`);
   
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
   const geminiApiEndpoint = Deno.env.get("GEMINI_API_ENDPOINT") || 
-                           'https://generativelanguage.googleapis.com/v1/models/gemini-embedding-exp-03-07:embedContent';
+                           'https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro-001:embedContent';
   
   if (!geminiApiKey) {
     throw new Error("GEMINI_API_KEY not found in environment variables");
@@ -79,7 +79,7 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gemini-embedding-exp-03-07',
+            model: 'gemini-1.0-pro-001',
             content: { parts: [{ text: truncatedText }] },
           }),
         }
@@ -108,9 +108,9 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
         const embeddingValues = data.embedding.values;
         safeLog(`Successfully generated embedding with dimension: ${embeddingValues.length}`);
         
-        // Check if embedding dimension is 3072 (correct for gemini-embedding-exp-03-07)
-        if (embeddingValues.length !== 3072) {
-          console.warn(`WARNING: Embedding dimension (${embeddingValues.length}) does not match expected dimension (3072) for gemini-embedding-exp-03-07`);
+        // Check if embedding dimension is 768 (correct for gemini-1.0-pro-001)
+        if (embeddingValues.length !== 768) {
+          console.warn(`WARNING: Embedding dimension (${embeddingValues.length}) does not match expected dimension (768) for gemini-1.0-pro-001`);
         }
         
         return embeddingValues;
@@ -200,8 +200,8 @@ async function storeEmbeddingInPinecone(userId: string, profileData: any, embedd
     safeLog(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
     
     // Check embedding dimension
-    if (embedding.length !== 3072) {
-      console.warn(`WARNING: Embedding dimension (${embedding.length}) does not match expected dimension (3072) for Pinecone`);
+    if (embedding.length !== 768) {
+      console.warn(`WARNING: Embedding dimension (${embedding.length}) does not match expected dimension (768) for Pinecone`);
     }
     
     const body = {
