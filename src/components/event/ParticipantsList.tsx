@@ -20,7 +20,7 @@ type Profile = {
 
 interface ParticipantsListProps {
   profiles: Profile[];
-  eventId: string; // Added eventId prop
+  eventId: string;
 }
 
 const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialProfiles, eventId }) => {
@@ -29,11 +29,11 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
   const [isLoading, setIsLoading] = useState(false);
   
   useEffect(() => {
-    if (initialProfiles.length === 0 && eventId) {
-      // If no profiles were passed, fetch them directly
+    // Always fetch profiles when component mounts to ensure we have the latest data
+    if (eventId) {
       fetchProfiles();
     }
-  }, [eventId, initialProfiles.length]);
+  }, [eventId]);
   
   const fetchProfiles = async () => {
     if (!eventId) return;
@@ -42,11 +42,35 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({ profiles: initialPr
     try {
       console.log('Fetching profiles for event:', eventId);
       
-      // Fetch all profiles for this event
+      // First get all participants for this event
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('participants')
+        .select('user_id')
+        .eq('event_id', eventId);
+        
+      if (participantsError) {
+        console.error('Error fetching participants:', participantsError);
+        return;
+      }
+      
+      console.log('Found participants:', participantsData?.length, participantsData);
+      
+      if (!participantsData || participantsData.length === 0) {
+        console.log('No participants found for event');
+        setProfiles([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Get the user IDs from participants
+      const userIds = participantsData.map(p => p.user_id);
+      
+      // Then fetch profiles for those users in this event
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for')
-        .eq('event_id', eventId);
+        .eq('event_id', eventId)
+        .in('id', userIds);
         
       if (profilesError) {
         console.error('Error fetching profiles:', profilesError);

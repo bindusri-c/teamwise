@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, generateProfileEmbedding } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,10 +38,10 @@ const EventDetails = () => {
   const [isCreator, setIsCreator] = useState(false);
 
   useEffect(() => {
-    if (eventId) {
+    if (eventId && userId) {
       fetchEventDetails();
     }
-  }, [eventId]);
+  }, [eventId, userId]);
 
   useEffect(() => {
     // Debug output for troubleshooting
@@ -53,6 +52,8 @@ const EventDetails = () => {
   }, [userId, eventId, profiles]);
 
   const fetchEventDetails = async () => {
+    if (!eventId || !userId) return;
+    
     setIsLoading(true);
     try {
       console.log('Fetching event details for eventId:', eventId);
@@ -71,32 +72,68 @@ const EventDetails = () => {
       setIsCreator(eventData.created_by === userId);
 
       // First, ensure the user is enrolled in this event
-      if (userId) {
-        const { data: participantData, error: participantError } = await supabase
+      const { data: participantData, error: participantError } = await supabase
+        .from('participants')
+        .select('*')
+        .eq('event_id', eventId)
+        .eq('user_id', userId)
+        .maybeSingle();
+        
+      if (participantError) {
+        console.error('Error checking participant status:', participantError);
+      } else if (!participantData) {
+        console.log('User is not a participant, adding them now');
+        // Add user as participant if not already
+        const { error: addParticipantError } = await supabase
           .from('participants')
-          .select('*')
-          .eq('event_id', eventId)
-          .eq('user_id', userId)
-          .maybeSingle();
+          .insert({
+            event_id: eventId,
+            user_id: userId
+          });
           
-        if (participantError) {
-          console.error('Error checking participant status:', participantError);
-        } else if (!participantData) {
-          console.log('User is not a participant, adding them now');
-          // Add user as participant if not already
-          const { error: addParticipantError } = await supabase
-            .from('participants')
-            .insert({
-              event_id: eventId,
-              user_id: userId
-            });
-            
-          if (addParticipantError) {
-            console.error('Error adding user as participant:', addParticipantError);
-          }
+        if (addParticipantError) {
+          console.error('Error adding user as participant:', addParticipantError);
         }
       }
 
+      // Check if the user has a profile for this event
+      const { data: existingProfile, error: profileCheckError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .eq('event_id', eventId)
+        .maybeSingle();
+      
+      if (profileCheckError) {
+        console.error('Error checking for existing profile:', profileCheckError);
+      }
+      
+      // If no profile exists yet, create one
+      if (!existingProfile) {
+        console.log('No profile exists for current user. Creating one now.');
+        await createUserProfile(userId, eventId);
+      }
+
+      // Then fetch profiles and similarity scores
+      await fetchProfiles();
+      
+    } catch (error: any) {
+      console.error('Error fetching event details:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load event details. Please try again.",
+        variant: "destructive",
+      });
+      navigate('/dashboard');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchProfiles = async () => {
+    if (!eventId) return;
+    
+    try {
       // Fetch all profiles for this event
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -113,40 +150,12 @@ const EventDetails = () => {
       if (profilesData && profilesData.length > 0) {
         await fetchExistingSimilarityScores(profilesData);
       } else {
-        console.log('No profiles found for this event. Checking if we need to create one for current user.');
-        
-        if (userId) {
-          // Check if user already has a profile
-          const { data: existingProfile, error: profileCheckError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .eq('event_id', eventId)
-            .maybeSingle();
-          
-          if (profileCheckError) {
-            console.error('Error checking for existing profile:', profileCheckError);
-          }
-          
-          if (!existingProfile) {
-            console.log('No profile exists for current user. Creating one now.');
-            await createUserProfile(userId, eventId);
-          }
-        }
-        
         // Set profiles to empty array
         setProfiles([]);
       }
-    } catch (error: any) {
-      console.error('Error fetching event details:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load event details. Please try again.",
-        variant: "destructive",
-      });
-      navigate('/dashboard');
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      console.error('Error fetching profiles:', error);
+      setProfiles([]);
     }
   };
 
@@ -206,76 +215,14 @@ const EventDetails = () => {
       console.log('Profile created successfully:', createdProfile);
       
       // Generate embedding for the new profile
-      const { success, error } = await generateProfileEmbedding(userId, eventId);
-      
-      if (!success) {
-        console.error('Error generating profile embedding:', error);
-      } else {
-        console.log('Profile embedding generated successfully');
-      }
+      const embedResult = await generateProfileEmbedding(userId, eventId);
+      console.log('Profile embedding generation result:', embedResult);
       
       // Refresh profiles
-      fetchEventDetails();
+      fetchProfiles();
       
     } catch (error) {
       console.error('Error creating user profile:', error);
-    }
-  };
-
-  const generateProfileEmbedding = async (userId: string, eventId: string) => {
-    try {
-      console.log('Generating embedding for user:', userId, 'in event:', eventId);
-      
-      // Get profile data
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .eq('event_id', eventId)
-        .single();
-      
-      if (profileError) {
-        console.error('Error fetching profile for embedding:', profileError);
-        return { success: false, error: profileError };
-      }
-      
-      // Get event data to determine the Pinecone index name
-      const { data: eventData, error: eventError } = await supabase
-        .from('events')
-        .select('name')
-        .eq('id', eventId)
-        .single();
-        
-      if (eventError) {
-        console.error('Error fetching event for embedding:', eventError);
-        return { success: false, error: eventError };
-      }
-      
-      // Generate the pinecone index name
-      const indexName = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
-      
-      console.log(`Using Pinecone index name for event ${eventId}: ${indexName}`);
-      
-      // Call the generate-embedding function
-      const { data, error } = await supabase.functions.invoke('generate-embedding', {
-        body: { 
-          userId, 
-          eventId, 
-          profileData,
-          pineconeIndex: indexName
-        }
-      });
-      
-      if (error) {
-        console.error('Error invoking generate-embedding function:', error);
-        return { success: false, error };
-      }
-      
-      console.log('Embedding generation response:', data);
-      return { success: true, data };
-    } catch (error) {
-      console.error('Error generating profile embedding:', error);
-      return { success: false, error };
     }
   };
 
