@@ -55,6 +55,31 @@ const EmbeddingTestButton = () => {
         
         eventId = newEvent.id;
         
+        // Create Pinecone index for the new event
+        try {
+          console.log("Creating Pinecone index for test event");
+          const { data: pineconeData, error: pineconeError } = await supabase.functions.invoke(
+            'create-pinecone-index', 
+            {
+              body: {
+                eventId,
+                eventName: 'datathon',
+                eventCode: '123456'
+              }
+            }
+          );
+          
+          if (pineconeError) {
+            console.warn("Warning: Could not create Pinecone index:", pineconeError);
+            // Continue anyway, the embedding might still work
+          } else {
+            console.log("Pinecone index created:", pineconeData);
+          }
+        } catch (pineconeCreateError) {
+          console.warn("Warning: Error creating Pinecone index:", pineconeCreateError);
+          // Continue anyway
+        }
+        
         toast({
           title: "Event Created",
           description: "Created 'datathon' event for testing",
@@ -78,9 +103,9 @@ const EmbeddingTestButton = () => {
             event_id: eventId,
             name: 'Test User',
             email: 'test@example.com',
-            skills: ['coding', 'testing'],
-            interests: ['AI', 'data science'],
-            about_you: 'This is a test profile for embedding generation'
+            skills: ['coding', 'testing', 'machine learning'],
+            interests: ['AI', 'data science', 'computer vision'],
+            about_you: 'This is a test profile for embedding generation using the new gemini-embedding-exp-03-07 model which produces 3072-dimensional vectors.'
           });
         
         if (insertError) {
@@ -125,7 +150,7 @@ const EmbeddingTestButton = () => {
       disabled={isLoading || !userId}
       className="bg-rag-primary hover:bg-rag-secondary"
     >
-      {isLoading ? 'Processing...' : 'Test Embedding Generation'}
+      {isLoading ? 'Processing...' : 'Test Embedding (gemini-embedding-exp-03-07)'}
     </Button>
   );
 };

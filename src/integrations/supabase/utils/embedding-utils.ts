@@ -32,7 +32,7 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
     // Get the event data to calculate the Pinecone index name
     const { data: eventData, error: eventError } = await supabase
       .from('events')
-      .select('name')
+      .select('name, pinecone_index')
       .eq('id', eventId)
       .single();
       
@@ -41,8 +41,10 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       return { success: false, error: eventError };
     }
     
-    // Calculate the index name using the same logic as in the edge function
-    const pineconeIndex = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+    // Use the stored pinecone_index if available, otherwise calculate it
+    const pineconeIndex = eventData.pinecone_index || 
+      `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+    
     console.log(`Using Pinecone index: ${pineconeIndex}`);
     
     // Call the Supabase Edge Function to generate the embedding

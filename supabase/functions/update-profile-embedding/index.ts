@@ -48,11 +48,11 @@ const checkRequiredEnvVars = () => {
 
 // Helper function to generate embedding vector using Gemini API with retries
 async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
-  safeLog(`Generating embedding for text of length: ${text.length}`);
+  safeLog(`Generating embedding using gemini-embedding-exp-03-07 model for text of length: ${text.length}`);
   
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
   const geminiApiEndpoint = Deno.env.get("GEMINI_API_ENDPOINT") || 
-                           'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent';
+                           'https://generativelanguage.googleapis.com/v1/models/gemini-embedding-exp-03-07:embedContent';
   
   if (!geminiApiKey) {
     throw new Error("GEMINI_API_KEY not found in environment variables");
@@ -79,7 +79,7 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'embedding-001',
+            model: 'gemini-embedding-exp-03-07',
             content: { parts: [{ text: truncatedText }] },
           }),
         }
@@ -105,8 +105,15 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
       
       // Return the embedding values
       if (data && data.embedding && data.embedding.values) {
-        safeLog(`Successfully generated embedding with dimension: ${data.embedding.values.length}`);
-        return data.embedding.values;
+        const embeddingValues = data.embedding.values;
+        safeLog(`Successfully generated embedding with dimension: ${embeddingValues.length}`);
+        
+        // Check if embedding dimension is 3072 (correct for gemini-embedding-exp-03-07)
+        if (embeddingValues.length !== 3072) {
+          console.warn(`WARNING: Embedding dimension (${embeddingValues.length}) does not match expected dimension (3072) for gemini-embedding-exp-03-07`);
+        }
+        
+        return embeddingValues;
       } else {
         console.error('Unexpected response format from Gemini API:', JSON.stringify(data).substring(0, 500));
         throw new Error('Invalid embedding response format from Gemini API');
@@ -128,21 +135,54 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
 }
 
 // Store embedding in Pinecone (optional)
-async function storeEmbeddingInPinecone(userId: string, profileData: any, embedding: number[]): Promise<void> {
+async function storeEmbeddingInPinecone(userId: string, profileData: any, embedding: number[], eventId?: string): Promise<void> {
   try {
     const pineconeApiKey = Deno.env.get("PINECONE_API_KEY");
     const pineconeProjectId = Deno.env.get("PINECONE_PROJECT_ID");
     const pineconeEnvironment = Deno.env.get("PINECONE_ENVIRONMENT");
-    const pineconeIndexName = Deno.env.get("PINECONE_INDEX_NAME") || 'profiles';
     
     if (!pineconeApiKey || !pineconeProjectId || !pineconeEnvironment) {
       safeLog('Pinecone configuration incomplete, skipping Pinecone storage');
       return;
     }
+    
+    // Determine the index name
+    let pineconeIndexName;
+    
+    if (eventId) {
+      try {
+        // Create Supabase client
+        const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        
+        // Try to get the index name from the event
+        const { data: eventData, error: eventError } = await supabase
+          .from('events')
+          .select('name, pinecone_index')
+          .eq('id', eventId)
+          .maybeSingle();
+          
+        if (!eventError && eventData) {
+          pineconeIndexName = eventData.pinecone_index || 
+            `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+        }
+      } catch (error) {
+        console.error('Error determining index name from event:', error);
+      }
+    }
+    
+    // Fallback to default index name if we couldn't determine it from the event
+    if (!pineconeIndexName) {
+      pineconeIndexName = Deno.env.get("PINECONE_INDEX_NAME") || 'profiles';
+    }
+    
+    safeLog(`Using Pinecone index: ${pineconeIndexName}`);
 
     // Create metadata for the vector
     const metadata = {
       user_id: userId,
+      event_id: eventId || null,
       name: profileData.name,
       email: profileData.email || null,
       age: profileData.age ? profileData.age.toString() : null,
@@ -159,18 +199,31 @@ async function storeEmbeddingInPinecone(userId: string, profileData: any, embedd
     
     safeLog(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
     
+    // Check embedding dimension
+    if (embedding.length !== 3072) {
+      console.warn(`WARNING: Embedding dimension (${embedding.length}) does not match expected dimension (3072) for Pinecone`);
+    }
+    
     const body = {
       vectors: [
         {
-          id: userId,
+          id: eventId ? `${userId}_${eventId}` : userId,
           values: embedding,
           metadata
         }
       ]
     };
 
-    safeLog(`Storing embedding in Pinecone for user ${userId}`);
-    
+    // Log payload without the full embedding values for debugging
+    const debugPayload = {
+      ...body,
+      vectors: [{
+        ...body.vectors[0],
+        values: `[Array of ${embedding.length} values]`
+      }]
+    };
+    safeLog(`Pinecone payload:`, debugPayload);
+
     const response = await fetch(pineconeUrl, {
       method: 'POST',
       headers: {
@@ -224,9 +277,9 @@ serve(async (req) => {
       );
     }
     
-    const { profileData, userId } = reqBody;
+    const { profileData, userId, eventId } = reqBody;
 
-    safeLog(`Processing request for user ID: ${userId}`);
+    safeLog(`Processing request for user ID: ${userId}${eventId ? `, event ID: ${eventId}` : ''}`);
     safeLog("Profile data received:", profileData);
 
     if (!profileData || !userId) {
@@ -273,7 +326,7 @@ serve(async (req) => {
     let embedding;
     try {
       embedding = await generateEmbedding(profileText);
-      safeLog("Successfully generated embedding");
+      safeLog(`Successfully generated embedding with dimension: ${embedding.length}`);
     } catch (embeddingError) {
       console.error("Error generating embedding:", embeddingError);
       // Return error since the embedding generation failed
@@ -290,7 +343,7 @@ serve(async (req) => {
     // Store the embedding in the database
     safeLog("Updating profile with embedding in database");
     try {
-      const { error } = await supabase
+      const updateQuery = supabase
         .from('profiles')
         .update({
           embedding: embedding,
@@ -306,6 +359,13 @@ serve(async (req) => {
           updated_at: new Date().toISOString()
         })
         .eq('id', userId);
+      
+      // If eventId is provided, add it to the query
+      if (eventId) {
+        updateQuery.eq('event_id', eventId);
+      }
+      
+      const { error } = await updateQuery;
 
       if (error) {
         console.error("Error updating profile in database:", error);
@@ -327,7 +387,7 @@ serve(async (req) => {
 
     // Also store the embedding in Pinecone for later retrieval (optional)
     try {
-      await storeEmbeddingInPinecone(userId, profileData, embedding);
+      await storeEmbeddingInPinecone(userId, profileData, embedding, eventId);
     } catch (pineconeError) {
       console.error("Error storing embedding in Pinecone:", pineconeError);
       // Continue execution - Pinecone storage is optional

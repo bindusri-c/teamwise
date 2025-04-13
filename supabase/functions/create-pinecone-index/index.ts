@@ -18,8 +18,8 @@ const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
 const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
 const pineconeProjectId = Deno.env.get('PINECONE_PROJECT_ID') as string
 
-// Set dimension for Gemini embedding-001 model (produces 768-dimensional vectors)
-const EMBEDDING_DIMENSION = 768;
+// Set dimension for gemini-embedding-exp-03-07 model (produces 3072-dimensional vectors)
+const EMBEDDING_DIMENSION = 3072;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           name: indexName,
-          dimension: EMBEDDING_DIMENSION, // Using Gemini embedding-001 dimension
+          dimension: EMBEDDING_DIMENSION, // Using gemini-embedding-exp-03-07 dimension
           metric: 'cosine',
           spec: {
             serverless: {

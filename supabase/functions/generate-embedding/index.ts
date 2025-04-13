@@ -30,7 +30,7 @@ interface RequestBody {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
 const geminiApiKey = Deno.env.get('GEMINI_API_KEY') as string
-const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent'
+const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/gemini-embedding-exp-03-07:embedContent'
 
 // Pinecone configuration
 const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
@@ -38,8 +38,8 @@ const pineconeProjectId = Deno.env.get('PINECONE_PROJECT_ID') as string
 const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
 const pineconeIndexName = Deno.env.get('PINECONE_INDEX_NAME') || 'profiles'
 
-// Expected dimension for Pinecone index (Gemini embedding-001 produces 768-dimensional vectors)
-const EXPECTED_DIMENSION = 768;
+// Expected dimension for Pinecone index (gemini-embedding-exp-03-07 produces 3072-dimensional vectors)
+const EXPECTED_DIMENSION = 3072;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -156,7 +156,7 @@ async function createEmbeddingText(profile: Profile): Promise<string> {
 
 // Updated function to generate embedding vector using Gemini API with retries
 async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
-  console.log(`Generating embedding for text of length: ${text.length}`)
+  console.log(`Generating embedding using gemini-embedding-exp-03-07 model for text of length: ${text.length}`)
   
   // Truncate text if too long (Gemini has token limits)
   const truncatedText = text.length > 2048 ? text.substring(0, 2048) : text
@@ -172,7 +172,7 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'embedding-001',
+            model: 'gemini-embedding-exp-03-07',
             content: { parts: [{ text: truncatedText }] },
           }),
         }
@@ -280,6 +280,11 @@ async function storeEmbeddingInPinecone(
     const pineconeUrl = `https://${indexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
     
     console.log(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
+    
+    // Verify embedding length
+    if (embedding.length !== EXPECTED_DIMENSION) {
+      console.warn(`WARNING: Embedding dimension (${embedding.length}) does not match expected dimension (${EXPECTED_DIMENSION}) for Pinecone`);
+    }
     
     // Format the payload exactly according to Pinecone API requirements
     const body = {
