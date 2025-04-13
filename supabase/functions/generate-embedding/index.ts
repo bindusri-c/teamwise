@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
 // Define interfaces
@@ -28,17 +29,9 @@ interface RequestBody {
 // Supabase client setup with explicit types
 const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
-const geminiApiKey = Deno.env.get('GEMINI_API_KEY') as string
-const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro-001:embedContent'
 
-// Pinecone configuration
-const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
-const pineconeProjectId = Deno.env.get('PINECONE_PROJECT_ID') as string
-const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
-const pineconeIndexName = Deno.env.get('PINECONE_INDEX_NAME') || 'profiles'
-
-// Expected dimension for Pinecone index (gemini-1.0-pro-001 produces 768-dimensional vectors)
-const EXPECTED_DIMENSION = 768;
+// Webhook URL
+const webhookUrl = "https://datathon.app.n8n.cloud/webhook-test/c0272a0f-0003-46a8-b535-9dac9d8558ae"
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -55,283 +48,40 @@ export const corsResponse = () => {
   })
 }
 
-// Improved function to extract text from PDF resume with better error handling
-async function extractTextFromPDF(resumeUrl: string): Promise<string> {
+// Function to send user data to webhook
+async function sendUserDataToWebhook(userId: string, eventId: string, profileData: Profile): Promise<boolean> {
   try {
-    console.log(`Downloading resume from: ${resumeUrl}`);
+    console.log(`Sending user data to webhook for user ${userId} in event ${eventId}`)
     
-    // Download the PDF file
-    const pdfResponse = await fetch(resumeUrl);
-    if (!pdfResponse.ok) {
-      console.error(`Failed to download PDF: ${pdfResponse.status} ${pdfResponse.statusText}`);
-      return "";
+    // Prepare the payload
+    const payload = {
+      userId,
+      eventId,
+      profileData
     }
     
-    // Get the PDF content as arrayBuffer
-    const pdfBuffer = await pdfResponse.arrayBuffer();
-    
-    try {
-      // Attempt to extract text using TextDecoder
-      // Note: This is a basic extraction that will only work for text-based PDFs
-      const decoder = new TextDecoder("utf-8");
-      let text = decoder.decode(pdfBuffer);
-      
-      // Basic cleaning: remove non-printable characters and normalize whitespace
-      text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ")  // Keep only printable ASCII and whitespace
-                 .replace(/\s+/g, " ")                 // Normalize whitespace
-                 .trim();
-      
-      // Extract a reasonable amount of text (first 5000 characters)
-      const extractedText = text.substring(0, 5000);
-      
-      console.log(`Successfully extracted ${extractedText.length} characters from resume`);
-      return extractedText;
-    } catch (decodingError) {
-      console.error(`Error decoding PDF: ${decodingError.message}`);
-      // Return a fallback empty string if decoding fails
-      return "";
-    }
-  } catch (error) {
-    console.error(`Error extracting text from PDF: ${error.message}`);
-    return "";
-  }
-}
-
-// Enhanced function to create a text representation of the profile
-async function createEmbeddingText(profile: Profile): Promise<string> {
-  // Build a structured profile summary with weighted importance
-  // Start with most important identity information
-  let profileText = '';
-  
-  // IDENTITY - Primary identifiers
-  if (profile.name) profileText += `Name: ${profile.name}. `;
-  if (profile.email) profileText += `Email: ${profile.email}. `;
-  
-  // PROFESSIONAL SUMMARY - Heavily weight the "about_you" section as it typically contains the most detailed self-description
-  if (profile.about_you) {
-    profileText += `About: ${profile.about_you.replace(/\n/g, ' ')}. `;
-  }
-  
-  // SKILLS - Professional capabilities (heavily weighted)
-  if (profile.skills?.length) {
-    // Give extra importance to skills by repeating them and structuring them clearly
-    profileText += `Skills: ${profile.skills.join(', ')}. `;
-    // Add each skill individually for more emphasis
-    profile.skills.forEach(skill => {
-      profileText += `Has skill in: ${skill}. `;
-    });
-  }
-  
-  // INTERESTS - Personal preferences (moderately weighted)
-  if (profile.interests?.length) {
-    profileText += `Interests: ${profile.interests.join(', ')}. `;
-    // Add each interest individually for more emphasis
-    profile.interests.forEach(interest => {
-      profileText += `Interested in: ${interest}. `;
-    });
-  }
-  
-  // PERSONAL DETAILS - Less important but still relevant
-  if (profile.hobbies) profileText += `Hobbies: ${profile.hobbies}. `;
-  if (profile.age) profileText += `Age: ${profile.age}. `;
-  if (profile.gender) profileText += `Gender: ${profile.gender}. `;
-  
-  // PROFESSIONAL LINKS - Less critical but indicates professional presence
-  if (profile.linkedin_url) profileText += `LinkedIn: ${profile.linkedin_url}. `;
-  
-  // Try to extract and add resume content if available
-  if (profile.resume_url) {
-    console.log(`Extracting resume content from ${profile.resume_url}`);
-    const resumeText = await extractTextFromPDF(profile.resume_url);
-    if (resumeText) {
-      profileText += `Resume content: ${resumeText}. `;
-      console.log(`Added ${resumeText.length} characters of resume content to embedding text`);
-    }
-  }
-  
-  console.log(`Created profile text with length: ${profileText.length} characters`);
-  return profileText.trim();
-}
-
-// Updated function to generate embedding vector using Gemini API with retries
-async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
-  console.log(`Generating embedding using gemini-1.0-pro-001 model for text of length: ${text.length}`)
-  
-  // Truncate text if too long (Gemini has token limits)
-  const truncatedText = text.length > 2048 ? text.substring(0, 2048) : text
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      // Double-check the API key is available
-      if (!geminiApiKey) {
-        throw new Error('GEMINI_API_KEY environment variable is not set');
-      }
-      
-      // Payload format for gemini-1.0-pro-001
-      const response = await fetch(
-        `${geminiApiEndpoint}?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'gemini-1.0-pro-001',
-            content: { parts: [{ text: truncatedText }] },
-          }),
-        }
-      )
-
-      if (response.status === 429 && attempt < maxRetries) {
-        // Rate limit hit, implement exponential backoff
-        const backoffTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s backoff
-        console.log(`Rate limited. Retrying in ${backoffTime}ms (attempt ${attempt}/${maxRetries})`)
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
-        continue;
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`Error from Gemini API: ${response.status} ${errorText}`)
-        throw new Error(`Gemini API error: ${response.status}`)
-      }
-
-      const data = await response.json()
-      
-      // Return the embedding values
-      if (data && data.embedding && data.embedding.values) {
-        const embeddingValues = data.embedding.values;
-        console.log(`Successfully generated embedding with dimension: ${embeddingValues.length}`)
-        
-        // Verify the embedding dimension matches the expected dimension for Pinecone
-        if (embeddingValues.length !== EXPECTED_DIMENSION) {
-          console.warn(`WARNING: Embedding dimension (${embeddingValues.length}) does not match expected dimension (${EXPECTED_DIMENSION}) for Pinecone`);
-        }
-        
-        return embeddingValues;
-      } else {
-        console.error('Unexpected response format from Gemini API:', JSON.stringify(data).substring(0, 500))
-        throw new Error('Invalid embedding response format from Gemini API')
-      }
-    } catch (error) {
-      if (attempt === maxRetries) {
-        console.error('All embedding generation attempts failed:', error)
-        throw error
-      }
-      console.error(`Embedding attempt ${attempt} failed:`, error)
-      // Implement backoff for other errors too
-      await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-    }
-  }
-  
-  throw new Error('Failed to generate embedding after all retry attempts')
-}
-
-// Improved function to store embedding in Pinecone with proper URL format
-async function storeEmbeddingInPinecone(
-  userId: string, 
-  eventId: string, 
-  profile: Profile, 
-  embedding: number[],
-  explicitIndexName?: string
-): Promise<void> {
-  try {
-    if (!pineconeApiKey || !pineconeProjectId || !pineconeEnvironment) {
-      console.log('Pinecone configuration incomplete (missing API key, project ID, or environment), skipping Pinecone storage');
-      return;
-    }
-
-    // Use explicitly provided index name if available
-    let indexName = explicitIndexName;
-    
-    // If no explicit index name is provided, try to get it from the event
-    if (!indexName) {
-      const { data: eventData, error: eventError } = await supabase
-        .from('events')
-        .select('name, pinecone_index')
-        .eq('id', eventId)
-        .single();
-      
-      if (eventError) {
-        console.error(`Error fetching event data: ${eventError.message}`);
-        return;
-      }
-      
-      // Use the stored pinecone_index if available, otherwise generate it
-      indexName = eventData.pinecone_index || 
-        `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
-    }
-    
-    if (!indexName) {
-      console.error(`No Pinecone index name could be determined for event ${eventId}`);
-      return;
-    }
-    
-    console.log(`Using Pinecone index: ${indexName} for event ${eventId}`);
-
-    // Create metadata for the vector
-    // Keep metadata small and focused on searchable fields
-    const metadata = {
-      user_id: userId,
-      event_id: eventId,
-      name: profile.name,
-      email: profile.email,
-      skills: profile.skills?.join(", ") || null,
-      interests: profile.interests?.join(", ") || null,
-      about_you: profile.about_you ? profile.about_you.substring(0, 500) : null,
-    };
-
-    // Properly formatted Pinecone URL with projectId
-    const pineconeUrl = `https://${indexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
-    
-    console.log(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
-    
-    // Verify embedding length
-    if (embedding.length !== EXPECTED_DIMENSION) {
-      console.warn(`WARNING: Embedding dimension (${embedding.length}) does not match expected dimension (${EXPECTED_DIMENSION}) for Pinecone`);
-    }
-    
-    // Format the payload exactly according to Pinecone API requirements
-    const body = {
-      vectors: [
-        {
-          id: `${userId}_${eventId}`,
-          values: embedding,
-          metadata
-        }
-      ]
-    };
-
-    // Log the payload for debugging (without the full values array)
-    const debugPayload = {
-      ...body,
-      vectors: [{
-        ...body.vectors[0],
-        values: `[Array of ${embedding.length} values]`
-      }]
-    };
-    console.log(`Pinecone upsert payload:`, JSON.stringify(debugPayload, null, 2));
-    
-    const response = await fetch(pineconeUrl, {
+    // Send POST request to webhook
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Api-Key': pineconeApiKey
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(body)
-    });
-
+      body: JSON.stringify(payload)
+    })
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Error from Pinecone: ${response.status} ${errorText}`);
-      throw new Error(`Pinecone upsert failed: ${response.status} ${errorText}`);
+      const errorText = await response.text()
+      console.error(`Error from webhook: ${response.status} ${errorText}`)
+      throw new Error(`Webhook error: ${response.status}`)
     }
-
-    const responseData = await response.json();
-    console.log(`Successfully stored embedding in Pinecone. Response:`, responseData);
+    
+    const responseData = await response.json().catch(() => ({}))
+    console.log(`Successfully sent data to webhook. Response:`, responseData)
+    
+    return true
   } catch (error) {
-    console.error('Error storing embedding in Pinecone:', error);
-    // Don't throw the error - we want to continue even if Pinecone storage fails
+    console.error('Error sending data to webhook:', error)
+    return false
   }
 }
 
@@ -344,7 +94,7 @@ Deno.serve(async (req) => {
 
   try {
     // Parse the request body
-    const { userId, eventId, profileData, pineconeIndex } = await req.json() as RequestBody;
+    const { userId, eventId, profileData } = await req.json() as RequestBody;
 
     if (!userId || !eventId || !profileData) {
       return new Response(
@@ -356,40 +106,30 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log(`Processing profile embedding for user: ${userId}, event: ${eventId}`)
-    if (pineconeIndex) {
-      console.log(`Using explicitly provided Pinecone index: ${pineconeIndex}`)
+    console.log(`Processing profile data for user: ${userId}, event: ${eventId}`)
+    
+    // Send user data to webhook
+    const success = await sendUserDataToWebhook(userId, eventId, profileData)
+    
+    if (!success) {
+      throw new Error('Failed to send data to webhook')
     }
-
-    // Create text representation for embedding (now with resume content)
-    const textForEmbedding = await createEmbeddingText(profileData)
     
-    // Generate embedding using Gemini API with retries
-    const embedding = await generateEmbedding(textForEmbedding)
-    
-    // Log the embedding length to check dimensions
-    console.log(`Generated embedding with length: ${embedding.length}`);
-    
-    // Store the embedding as a JSON string in the database
-    // Also update the updated_at timestamp
+    // Update the profile in the database to indicate processing
     const { error: updateError } = await supabase
       .from('profiles')
       .update({ 
-        embedding: JSON.stringify(embedding),
         updated_at: new Date().toISOString()
       })
       .eq('id', userId)
       .eq('event_id', eventId)
 
     if (updateError) {
-      console.error('Error storing embedding in Supabase:', updateError)
+      console.error('Error updating profile in Supabase:', updateError)
       throw updateError
     }
 
-    console.log(`Successfully stored embedding in Supabase for user: ${userId}, event: ${eventId}`)
-    
-    // Also store the embedding in Pinecone, using the explicitly provided index if available
-    await storeEmbeddingInPinecone(userId, eventId, profileData, embedding, pineconeIndex)
+    console.log(`Successfully processed data for user: ${userId}, event: ${eventId}`)
 
     // Return success response
     return new Response(
