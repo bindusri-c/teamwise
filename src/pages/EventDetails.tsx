@@ -49,7 +49,6 @@ const EventDetails = () => {
   const fetchEventDetails = async () => {
     setIsLoading(true);
     try {
-      // Fetch event details
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('*')
@@ -60,10 +59,8 @@ const EventDetails = () => {
       
       setEvent(eventData);
       
-      // Check if user is the creator
       setIsCreator(eventData.created_by === userId);
 
-      // Fetch profiles for this event
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, name, email, image_url, skills, interests, linkedin_url, about_you, looking_for')
@@ -94,7 +91,6 @@ const EventDetails = () => {
     
     setLoadingSimilarities(true);
     try {
-      // Fetch similarity scores from profile_similarities table
       const { data: similarityData, error: similarityError } = await supabase
         .from('profile_similarities')
         .select('profile_id_1, profile_id_2, similarity_score')
@@ -103,14 +99,11 @@ const EventDetails = () => {
       
       if (similarityError) throw similarityError;
       
-      // Map similarity scores to profiles
       const profilesWithSimilarity = profilesData.map(profile => {
-        // Skip if it's the current user
         if (profile.id === userId) {
-          return { ...profile, similarity_score: 1.0 }; // 100% match with self
+          return { ...profile, similarity_score: 1.0 };
         }
         
-        // Find similarity score entry for this profile
         const similarityEntry = similarityData?.find(
           entry => 
             (entry.profile_id_1 === userId && entry.profile_id_2 === profile.id) ||
@@ -123,7 +116,8 @@ const EventDetails = () => {
         };
       });
       
-      setProfiles(profilesWithSimilarity);
+      const filteredProfiles = profilesWithSimilarity.filter(profile => profile.id !== userId);
+      setProfiles(filteredProfiles);
     } catch (error) {
       console.error('Error fetching similarity scores:', error);
     } finally {
@@ -352,7 +346,15 @@ const EventDetails = () => {
                   )}
                 </CardContent>
                 
-                <CardFooter className="bg-muted/30 justify-end">
+                <CardFooter className="bg-muted/30 justify-between">
+                  <div className="flex items-center">
+                    {profile.similarity_score !== undefined && (
+                      <Badge variant="outline" className="flex items-center gap-1">
+                        <Percent className="h-3 w-3" />
+                        Match: {formatSimilarityPercentage(profile.similarity_score)}
+                      </Badge>
+                    )}
+                  </div>
                   {profile.linkedin_url ? (
                     <a 
                       href={profile.linkedin_url} 
