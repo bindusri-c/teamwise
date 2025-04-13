@@ -23,7 +23,12 @@ async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]
                            'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent';
   
   if (!geminiApiKey) {
-    throw new Error("Gemini API key not found in environment variables");
+    throw new Error("GEMINI_API_KEY not found in environment variables");
+  }
+  
+  // Ensure text is not empty
+  if (!text || text.trim().length === 0) {
+    throw new Error("Cannot generate embedding for empty text");
   }
   
   // Truncate text if too long (Gemini has token limits)
@@ -165,7 +170,18 @@ serve(async (req) => {
     console.log("update-profile-embedding function started");
     
     // Get profile data from request body
-    const { profileData, userId } = await req.json();
+    let reqBody;
+    try {
+      reqBody = await req.json();
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const { profileData, userId } = reqBody;
 
     console.log(`Processing request for user ID: ${userId}`);
     console.log("Profile data received:", JSON.stringify(profileData));
@@ -191,8 +207,8 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Create a text representation of the profile for embedding
-    const profileText = [
-      profileData.name,
+    let profileText = [
+      profileData.name || "",
       profileData.aboutYou || "",
       profileData.skills?.join(" ") || "",
       profileData.interests?.join(" ") || "",
