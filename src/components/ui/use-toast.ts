@@ -1,3 +1,3 @@
 
-// Re-export toast functionality directly from hooks
+// Re-export toast functionality from the custom hook
 export { useToast, toast } from "@/hooks/use-toast";

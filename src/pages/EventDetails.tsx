@@ -79,6 +79,11 @@ const EventDetails = () => {
 
       if (eventError) {
         console.error('Error fetching event data:', eventError);
+        toast({
+          title: "Error",
+          description: "Failed to load event details: " + eventError.message,
+          variant: "destructive",
+        });
         throw eventError;
       }
       
@@ -101,6 +106,11 @@ const EventDetails = () => {
           
         if (participantError) {
           console.error('Error checking participant status:', participantError);
+          toast({
+            title: "Warning",
+            description: "Could not verify your participation status.",
+            variant: "destructive",
+          });
         } else {
           console.log('Participant status:', participantData ? 'Already a participant' : 'Not a participant');
           
@@ -116,8 +126,18 @@ const EventDetails = () => {
               
             if (addParticipantError) {
               console.error('Error adding user as participant:', addParticipantError);
+              toast({
+                title: "Error",
+                description: "Failed to join this event: " + addParticipantError.message,
+                variant: "destructive",
+              });
             } else {
               console.log('Successfully added user as participant');
+              toast({
+                title: "Success",
+                description: "You've joined this event!",
+                variant: "default",
+              });
             }
           }
         }
@@ -133,6 +153,11 @@ const EventDetails = () => {
         
         if (profileCheckError) {
           console.error('Error checking for existing profile:', profileCheckError);
+          toast({
+            title: "Warning",
+            description: "Could not verify your profile information.",
+            variant: "destructive",
+          });
         } else {
           console.log('Profile check result:', existingProfile ? 'Has profile' : 'No profile');
         }
@@ -140,11 +165,40 @@ const EventDetails = () => {
         // If no profile exists yet, create one
         if (!existingProfile) {
           console.log('No profile exists for current user. Creating one now.');
-          await createUserProfile(userId, eventId);
+          try {
+            await createUserProfile(userId, eventId);
+            toast({
+              title: "Profile Created",
+              description: "Your profile has been created for this event.",
+              variant: "default",
+            });
+          } catch (error: any) {
+            toast({
+              title: "Error",
+              description: "Failed to create your profile: " + (error?.message || "Unknown error"),
+              variant: "destructive",
+            });
+          }
         } else {
           console.log('User already has a profile. Ensuring embedding is generated.');
           // Even if the profile exists, make sure embedding is generated
-          await generateProfileEmbedding(userId, eventId);
+          try {
+            const result = await generateProfileEmbedding(userId, eventId);
+            if (!result.success) {
+              toast({
+                title: "Warning", 
+                description: "Could not generate profile similarity scores. Some features may be limited.",
+                variant: "destructive",
+              });
+            }
+          } catch (error: any) {
+            console.error('Error generating embedding:', error);
+            toast({
+              title: "Warning",
+              description: "Failed to update your profile data: " + (error?.message || "Unknown error"),
+              variant: "destructive",
+            });
+          }
         }
       } else {
         console.log('No userId available, skipping creator check and profile creation');
@@ -220,6 +274,11 @@ const EventDetails = () => {
     } catch (error) {
       console.error('Error fetching profiles:', error);
       setProfiles([]);
+      toast({
+        title: "Error",
+        description: "Failed to load participants. Please refresh the page.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -291,6 +350,7 @@ const EventDetails = () => {
       
     } catch (error) {
       console.error('Error creating user profile:', error);
+      throw error; // Rethrow for handling in the caller
     }
   };
 
@@ -341,6 +401,35 @@ const EventDetails = () => {
       // If we can't get similarity scores, still show the profiles
       console.log('Setting profiles without similarity scores');
       setProfiles(profilesData);
+      
+      toast({
+        title: "Warning",
+        description: "Could not load profile similarity scores.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Function to manually refresh the event data and profiles
+  const handleRefresh = async () => {
+    toast({
+      title: "Refreshing",
+      description: "Refreshing event data and profiles...",
+    });
+    
+    try {
+      await fetchEventDetails();
+      toast({
+        title: "Success",
+        description: "Event data refreshed successfully!",
+      });
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh data. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -377,14 +466,22 @@ const EventDetails = () => {
 
   return (
     <div className="container py-8 mx-auto">
-      <Button 
-        variant="outline" 
-        onClick={() => navigate('/dashboard')} 
-        className="mb-6"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Dashboard
-      </Button>
+      <div className="flex justify-between items-center mb-6">
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/dashboard')}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Dashboard
+        </Button>
+        
+        <Button 
+          variant="outline" 
+          onClick={handleRefresh}
+        >
+          Refresh Data
+        </Button>
+      </div>
       
       <EventHeader 
         event={event} 
