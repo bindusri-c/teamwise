@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -6,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Tables } from '@/integrations/supabase/types';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Linkedin, User } from 'lucide-react';
+import { Linkedin, User, Eye } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 type Event = Tables<'events'> & {
@@ -84,7 +85,15 @@ const EventsList = () => {
           is_creator: false
         }));
 
-        allEvents = [...createdWithFlag, ...joinedWithFlag];
+        // Filter out duplicates by ID
+        const uniqueEvents = [...createdWithFlag];
+        joinedWithFlag.forEach(event => {
+          if (!uniqueEvents.some(e => e.id === event.id)) {
+            uniqueEvents.push(event);
+          }
+        });
+
+        allEvents = uniqueEvents;
       } else {
         const createdWithFlag = createdEvents.map(event => ({
           ...event,
@@ -127,6 +136,10 @@ const EventsList = () => {
 
   const viewEventForm = (eventId: string) => {
     navigate(`/event/${eventId}`);
+  };
+  
+  const viewEventDetails = (eventId: string) => {
+    navigate(`/event-details/${eventId}`);
   };
   
   const toggleEventMembers = (eventId: string) => {
@@ -177,7 +190,7 @@ const EventsList = () => {
                 <p><strong>Created:</strong> {new Date(event.created_at).toLocaleDateString()}</p>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
+            <CardFooter className="flex justify-between flex-wrap gap-2">
               <Button 
                 variant="outline" 
                 onClick={() => viewEventForm(event.id)}
@@ -191,6 +204,13 @@ const EventsList = () => {
                 onClick={() => toggleEventMembers(event.id)}
               >
                 {selectedEvent === event.id ? "Hide Members" : "View Members"}
+              </Button>
+              <Button 
+                variant="default"
+                onClick={() => viewEventDetails(event.id)}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                View Event
               </Button>
             </CardFooter>
             
@@ -219,7 +239,7 @@ const EventsList = () => {
                                 <p className="text-xs text-muted-foreground mb-1">Skills</p>
                                 <div className="flex flex-wrap gap-1">
                                   {profile.skills.slice(0, 3).map((skill, i) => (
-                                    <span key={i} className="px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded-full">
+                                    <span key={`skill-${profile.id}-${i}`} className="px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded-full">
                                       {skill}
                                     </span>
                                   ))}
@@ -237,7 +257,7 @@ const EventsList = () => {
                                 <p className="text-xs text-muted-foreground mb-1">Interests</p>
                                 <div className="flex flex-wrap gap-1">
                                   {profile.interests.slice(0, 3).map((interest, i) => (
-                                    <span key={i} className="px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded-full">
+                                    <span key={`interest-${profile.id}-${i}`} className="px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded-full">
                                       {interest}
                                     </span>
                                   ))}

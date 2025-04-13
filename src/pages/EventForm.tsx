@@ -252,7 +252,7 @@ const EventForm = () => {
   };
   
   const extractSkills = (text: string): string[] => {
-    const skillKeywords = ['javascript', 'python', 'react', 'node', 'html', 'css', 'sql', 'java', 'c++', 'leadership', 'management'];
+    const skillKeywords = ['javascript', 'python', 'react', 'node', 'html', 'css', 'sql', 'java', 'c\\+\\+', 'leadership', 'management'];
     return skillKeywords.filter(skill => 
       new RegExp(`\\b${skill}\\b`, 'i').test(text)
     );

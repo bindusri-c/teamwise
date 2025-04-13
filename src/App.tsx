@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import EventForm from "./pages/EventForm";
+import EventDetails from "./pages/EventDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <EventForm />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/event-details/:eventId" 
+              element={
+                <ProtectedRoute>
+                  <EventDetails />
                 </ProtectedRoute>
               } 
             />
