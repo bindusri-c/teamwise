@@ -1,73 +1,90 @@
-# Welcome to your Lovable project
 
-## Project info
+# RAG Verse Journey
 
-**URL**: https://lovable.dev/projects/4934a3ec-5950-4df3-9274-e548015252ac
+## Project Overview
 
-## How can I edit this code?
+RAG Verse Journey is an innovative platform designed to help participants connect during events like datathons, hackathons, and collaborative gatherings. By leveraging AI-powered profile embeddings, the application enables intelligent participant matching based on skills, interests, and background.
 
-There are several ways of editing your application.
+## Key Features
 
-**Use Lovable**
+- AI-powered profile matching
+- Intelligent embedding generation
+- Event participation tracking
+- Profile creation and management
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/4934a3ec-5950-4df3-9274-e548015252ac) and start prompting.
+## Prerequisites
 
-Changes made via Lovable will be committed automatically to this repo.
+Before you begin, ensure you have the following installed:
+- Node.js (v18 or later)
+- npm (v9 or later)
+- A modern web browser
 
-**Use your preferred IDE**
+## Project Setup
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### 1. Clone the Repository
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+git clone <YOUR_PROJECT_REPOSITORY_URL>
+cd rag-verse-journey
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### 2. Install Dependencies
 
-# Step 3: Install the necessary dependencies.
-npm i
+```sh
+npm install
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### 3. Set Up Supabase
+
+1. Click on the Supabase button in the Lovable interface
+2. Connect your Supabase project
+3. Ensure all edge functions are deployed
+
+### 4. Environment Configuration
+
+Create a `.env` file in the project root and add your Supabase credentials:
+```
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### 5. Start Development Server
+
+```sh
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The application will be available at `http://localhost:3000`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Deployment
 
-**Use GitHub Codespaces**
+1. Open the project in Lovable
+2. Click "Publish" in the top right corner
+3. (Optional) Connect a custom domain in Project Settings
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Technologies
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
 - React
-- shadcn-ui
+- TypeScript
 - Tailwind CSS
+- Supabase
+- Shadcn UI
+- AI Embedding Generation (Gemini)
 
-## How can I deploy this project?
+## Contributing
 
-Simply open [Lovable](https://lovable.dev/projects/4934a3ec-5950-4df3-9274-e548015252ac) and click on Share -> Publish.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-## Can I connect a custom domain to my Lovable project?
+## License
 
-Yes it is!
+Distributed under the MIT License. See `LICENSE` for more information.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Contact
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Your Name - [Your Email or Social Media]
+Project Link: https://lovable.dev/projects/4934a3ec-5950-4df3-9274-e548015252ac
+```
