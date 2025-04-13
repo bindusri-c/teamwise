@@ -155,8 +155,6 @@ const EventDetails = () => {
     );
   }
 
-  const userHasProfile = profiles.some(profile => profile.id === userId);
-
   return (
     <div className="container py-8 mx-auto">
       <Button 
@@ -171,7 +169,7 @@ const EventDetails = () => {
       <EventHeader 
         event={event} 
         isCreator={isCreator} 
-        userHasProfile={userHasProfile} 
+        userHasProfile={true}
       />
       
       <ParticipantsList profiles={profiles} />

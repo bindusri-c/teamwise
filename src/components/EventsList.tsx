@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -135,10 +134,6 @@ const EventsList = () => {
     }
   };
 
-  const viewEventForm = (eventId: string) => {
-    navigate(`/event/${eventId}`);
-  };
-  
   const viewEventDetails = (eventId: string) => {
     navigate(`/event-details/${eventId}`);
   };
@@ -198,17 +193,6 @@ const EventsList = () => {
               </div>
             </CardContent>
             <CardFooter className="flex justify-between flex-wrap gap-2">
-              <div className="flex gap-2">
-                {!profiles[event.id]?.some(p => p.id === userId) && (
-                  <Button 
-                    variant="outline" 
-                    onClick={() => viewEventForm(event.id)}
-                  >
-                    Complete Registration
-                  </Button>
-                )}
-              </div>
-              
               <div className="flex gap-2">
                 <Button 
                   variant="secondary"

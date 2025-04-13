@@ -1,18 +1,20 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { createEvent } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { LoaderCircle } from 'lucide-react';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const CreateEventForm = () => {
   const [eventName, setEventName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { userId } = useCurrentUser();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,54 +28,29 @@ const CreateEventForm = () => {
       return;
     }
 
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to create an event",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // Generate a random code for the event using our SQL function
-      const { data: codeData, error: codeError } = await supabase
-        .rpc('generate_event_code');
+      // Use the enhanced createEvent function that handles all four steps
+      const { success, event, error } = await createEvent(eventName, userId);
 
-      if (codeError) throw codeError;
-      
-      const eventCode = codeData;
-
-      // Create the event
-      const { data, error } = await supabase
-        .from('events')
-        .insert({
-          name: eventName,
-          code: eventCode,
-          created_by: (await supabase.auth.getUser()).data.user?.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Create Pinecone index for this event
-      const { data: pineconeData, error: pineconeError } = await supabase.functions
-        .invoke('create-pinecone-index', {
-          body: { 
-            eventId: data.id,
-            eventName: eventName,
-            eventCode: eventCode 
-          }
-        });
-
-      if (pineconeError) {
-        console.error('Error creating Pinecone index:', pineconeError);
-        // We don't throw here because we want to proceed even if index creation fails
-        toast({
-          title: "Warning",
-          description: "Event created, but there was an issue setting up matching. Admin has been notified.",
-          variant: "default",
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: "Event created successfully! Your event code is: " + eventCode,
-        });
+      if (!success || error) {
+        throw new Error(error?.message || "Failed to create event");
       }
+
+      toast({
+        title: "Success",
+        description: `Event "${eventName}" created successfully! Your event code is: ${event?.code}`,
+      });
 
       // Reset form and navigate back to dashboard
       setEventName('');

@@ -1,13 +1,14 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { joinEvent } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { LoaderCircle } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const JoinEventForm = () => {
   const [eventCode, setEventCode] = useState('');
@@ -15,6 +16,7 @@ const JoinEventForm = () => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { userId } = useCurrentUser();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,88 +32,37 @@ const JoinEventForm = () => {
       return;
     }
 
+    if (!userId) {
+      setError("You must be logged in to join an event");
+      toast({
+        title: "Error",
+        description: "You must be logged in to join an event",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       console.log("Attempting to join event with code:", eventCode);
       
-      // First, query the events table with the provided code
-      const { data: eventData, error: eventError } = await supabase
-        .from('events')
-        .select('*')
-        .eq('code', eventCode.trim())
-        .maybeSingle();
+      // Use the enhanced joinEvent function that handles all steps
+      const { success, event, error: joinError } = await joinEvent(eventCode, userId);
 
-      if (eventError) {
-        console.error("Error fetching event:", eventError);
-        throw eventError;
+      if (!success || joinError) {
+        throw new Error(joinError?.message || "Failed to join event");
       }
 
-      console.log("Event data response:", eventData);
-      
-      // Check if the event was found
-      if (!eventData) {
-        throw new Error('Event not found. Please check the code and try again.');
-      }
-
-      // Use the event that matches
-      const event = eventData;
-      console.log("Found event:", event);
-
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !userData.user) {
-        throw new Error('You must be logged in to join an event.');
-      }
-      
-      const currentUser = userData.user;
-      console.log("Current user:", currentUser.id);
-      
-      // Check if user is already a participant
-      const { data: existingParticipant, error: checkError } = await supabase
-        .from('participants')
-        .select('*')
-        .eq('event_id', event.id)
-        .eq('user_id', currentUser.id);
-        
-      if (checkError) {
-        console.error("Error checking existing participant:", checkError);
-        throw checkError;
-      }
-      
-      if (existingParticipant && existingParticipant.length > 0) {
-        console.log("User already joined this event");
-        toast({
-          title: "Info",
-          description: `You have already joined the event "${event.name}"`,
-        });
-        // Still navigate to the event form page
-        navigate(`/event/${event.id}`);
-        return;
-      }
-      
-      // Now join the event
-      const { error: participantError } = await supabase
-        .from('participants')
-        .insert({
-          event_id: event.id,
-          user_id: currentUser.id
-        });
-
-      if (participantError) {
-        console.error("Error joining event:", participantError);
-        throw participantError;
-      }
-
-      console.log("Successfully joined event");
+      console.log("Successfully joined event:", event);
       toast({
         title: "Success",
-        description: `You have successfully joined the event "${event.name}"`,
+        description: `You have successfully joined the event "${event?.name}"`,
       });
 
-      // Reset form and navigate to the event form page
+      // Reset form and navigate to the event details page directly
       setEventCode('');
-      navigate(`/event/${event.id}`);
+      navigate(`/event-details/${event?.id}`);
     } catch (error: any) {
       console.error('Error joining event:', error);
       setError(error.message || "Failed to join event. Please try again.");
