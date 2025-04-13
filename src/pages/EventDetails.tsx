@@ -68,7 +68,8 @@ const EventDetails = () => {
       if (profilesError) throw profilesError;
       
       if (userId && profilesData.length > 0) {
-        await fetchSimilarityScores(profilesData);
+        // Just fetch similarity scores if they exist, don't auto-calculate
+        await fetchExistingSimilarityScores(profilesData);
       } else {
         // When no similarity scores are available, initialize profiles without scores
         console.log('No similarity scores available, setting profiles without scores');
@@ -88,13 +89,11 @@ const EventDetails = () => {
     }
   };
 
-  const fetchSimilarityScores = async (profilesData: Profile[]) => {
+  const fetchExistingSimilarityScores = async (profilesData: Profile[]) => {
     if (!userId || !eventId) return;
     
     setLoadingSimilarities(true);
-    try {
-      console.log('Fetching similarity scores for profiles:', profilesData);
-      
+    try {      
       // Fetch all similarity scores where the current user is involved
       const { data: similarityData, error: similarityError } = await supabase
         .from('profile_similarities')

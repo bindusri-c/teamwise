@@ -28,9 +28,10 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastCalculation, setLastCalculation] = useState<Date | null>(null);
   const { toast } = useToast();
 
-  const fetchSimilarProfiles = async () => {
+  const fetchSimilarProfiles = async (skipCalculation = false) => {
     if (!userId || !eventId) {
       setIsLoading(false);
       return;
@@ -55,8 +56,26 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
         return;
       }
 
+      // Directly fetch similar profiles without triggering calculation
+      await fetchSimilarityScores();
+      
+    } catch (error: any) {
+      console.error("Error fetching similar profiles:", error);
+      setError("Failed to load similarity scores. Try again later.");
+      toast({
+        title: "Error",
+        description: "Failed to load profile similarity data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Function to fetch similarity scores without calculation
+  const fetchSimilarityScores = async () => {
+    try {
       // Get similar profiles using the precomputed similarity scores
-      // Need to fetch from profile_similarities and join with profiles table
       const { data: similarityData, error: similarityError } = await supabase
         .from('profile_similarities')
         .select(`
@@ -95,7 +114,6 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
           }));
           
           setSimilarProfiles(profiles);
-          setIsLoading(false);
           return;
         }
       }
@@ -112,20 +130,10 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
         }));
         
         setSimilarProfiles(profiles);
-      } else {
-        // If no precomputed scores are found, trigger calculation
-        await calculateSimilarityScores();
       }
-    } catch (error: any) {
-      console.error("Error fetching similar profiles:", error);
-      setError("Failed to load similarity scores. Try again later.");
-      toast({
-        title: "Error",
-        description: "Failed to load profile similarity data.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      console.error("Error fetching similarity scores:", error);
+      throw error;
     }
   };
 
@@ -147,14 +155,15 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
       }
 
       console.log("Similarity calculation response:", data);
+      setLastCalculation(new Date());
       
       toast({
         title: "Success",
         description: "Similarity scores updated successfully.",
       });
 
-      // After calculation, fetch the profiles again
-      await fetchSimilarProfiles();
+      // After calculation, fetch the profiles again without triggering another calculation
+      await fetchSimilarityScores();
     } catch (error: any) {
       console.error("Error calculating similarity scores:", error);
       setError("Failed to calculate similarity scores. The service might be temporarily unavailable. Please try again later.");
@@ -169,7 +178,8 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
   };
 
   useEffect(() => {
-    fetchSimilarProfiles();
+    // Initial fetch without triggering calculation
+    fetchSimilarProfiles(true);
   }, [userId, eventId]);
 
   const getInitials = (name: string) => {
@@ -195,6 +205,9 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
     return "bg-red-400 text-white";
   };
 
+  const lastCalculationText = lastCalculation ? 
+    `Last updated: ${lastCalculation.toLocaleTimeString()}` : '';
+
   if (error) {
     return (
       <Card>
@@ -203,7 +216,7 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
           <Button 
             variant="outline" 
             size="sm"
-            onClick={calculateSimilarityScores}
+            onClick={() => calculateSimilarityScores()}
             disabled={isRefreshing}
           >
             {isRefreshing ? (
@@ -227,11 +240,16 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">People You Might Connect With</CardTitle>
+        <div>
+          <CardTitle className="text-lg">People You Might Connect With</CardTitle>
+          {lastCalculationText && (
+            <p className="text-xs text-muted-foreground mt-1">{lastCalculationText}</p>
+          )}
+        </div>
         <Button 
           variant="outline" 
           size="sm"
-          onClick={calculateSimilarityScores}
+          onClick={() => calculateSimilarityScores()}
           disabled={isRefreshing || isLoading}
         >
           {isRefreshing ? (
