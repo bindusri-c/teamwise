@@ -224,6 +224,26 @@ async function storeEmbeddingInPinecone(
       return;
     }
 
+    // Get the event info to find the pinecone index name
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('pinecone_index')
+      .eq('id', eventId)
+      .single();
+    
+    if (eventError) {
+      console.error(`Error fetching event data: ${eventError.message}`);
+      return;
+    }
+    
+    if (!eventData || !eventData.pinecone_index) {
+      console.error(`No Pinecone index found for event ${eventId}`);
+      return;
+    }
+    
+    const indexName = eventData.pinecone_index;
+    console.log(`Using Pinecone index: ${indexName} for event ${eventId}`);
+
     // Create metadata for the vector
     // Keep metadata small and focused on searchable fields
     const metadata = {
@@ -240,11 +260,10 @@ async function storeEmbeddingInPinecone(
       linkedin_url: profile.linkedin_url || null
     };
 
-    // Updated Pinecone URL format with project ID
-    // Format: https://<index-name>-<project-id>.svc.<environment>.pinecone.io/vectors/upsert
-    const pineconeUrl = `https://${pineconeIndexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
+    // Updated Pinecone URL format - now using the event-specific index
+    const pineconeUrl = `https://${indexName}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
     
-    // Simplified body with single vector (no need for array wrapper as we're only inserting one)
+    // Simplified body with single vector
     const body = {
       vectors: [
         {
@@ -255,7 +274,7 @@ async function storeEmbeddingInPinecone(
       ]
     };
 
-    console.log(`Storing embedding in Pinecone for user ${userId} in event ${eventId}`);
+    console.log(`Storing embedding in Pinecone for user ${userId} in event ${eventId} using index ${indexName}`);
     
     const response = await fetch(pineconeUrl, {
       method: 'POST',

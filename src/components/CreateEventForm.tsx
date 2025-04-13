@@ -50,10 +50,30 @@ const CreateEventForm = () => {
 
       if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Event created successfully! Your event code is: " + eventCode,
-      });
+      // Create Pinecone index for this event
+      const { data: pineconeData, error: pineconeError } = await supabase.functions
+        .invoke('create-pinecone-index', {
+          body: { 
+            eventId: data.id,
+            eventName: eventName,
+            eventCode: eventCode 
+          }
+        });
+
+      if (pineconeError) {
+        console.error('Error creating Pinecone index:', pineconeError);
+        // We don't throw here because we want to proceed even if index creation fails
+        toast({
+          title: "Warning",
+          description: "Event created, but there was an issue setting up matching. Admin has been notified.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Event created successfully! Your event code is: " + eventCode,
+        });
+      }
 
       // Reset form and navigate back to dashboard
       setEventName('');
