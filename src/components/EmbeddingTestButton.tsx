@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { generateProfileEmbedding } from '@/integrations/supabase/client';
+import { generateProfileEmbedding } from '@/integrations/supabase/utils/embedding-utils';
 import { supabase } from '@/integrations/supabase/client';
 
 const EmbeddingTestButton = () => {

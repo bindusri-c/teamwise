@@ -29,12 +29,29 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       return { success: false, error: { message: 'No profile found for user in this event' } };
     }
     
+    // Get the event data to calculate the Pinecone index name
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('name')
+      .eq('id', eventId)
+      .single();
+      
+    if (eventError) {
+      console.error('Error fetching event data:', eventError);
+      return { success: false, error: eventError };
+    }
+    
+    // Calculate the index name using the same logic as in the edge function
+    const pineconeIndex = `evt-${eventData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
+    console.log(`Using Pinecone index: ${pineconeIndex}`);
+    
     // Call the Supabase Edge Function to generate the embedding
     const { data, error } = await supabase.functions.invoke('generate-embedding', {
       body: { 
         userId, 
         eventId, 
-        profileData
+        profileData,
+        pineconeIndex // Pass the explicit index name
       }
     });
     
