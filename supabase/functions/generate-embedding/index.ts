@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
 // Define interfaces
@@ -220,8 +221,8 @@ async function storeEmbeddingInPinecone(
   explicitIndexName?: string
 ): Promise<void> {
   try {
-    if (!pineconeApiKey || !pineconeEnvironment) {
-      console.log('Pinecone API key or environment not set, skipping Pinecone storage');
+    if (!pineconeApiKey || !pineconeProjectId || !pineconeEnvironment) {
+      console.log('Pinecone configuration incomplete (missing API key, project ID, or environment), skipping Pinecone storage');
       return;
     }
 
@@ -268,8 +269,10 @@ async function storeEmbeddingInPinecone(
       linkedin_url: profile.linkedin_url || null
     };
 
-    // Updated Pinecone URL format - using the provided index name
-    const pineconeUrl = `https://${indexName}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
+    // FIXED: Updated Pinecone URL format with projectId included
+    const pineconeUrl = `https://${indexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
+    
+    console.log(`Storing embedding in Pinecone at URL: ${pineconeUrl}`);
     
     // Simplified body with single vector
     const body = {
