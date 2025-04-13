@@ -62,6 +62,58 @@ export type Database = {
           },
         ]
       }
+      profile_similarities: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          profile_id_1: string
+          profile_id_2: string
+          similarity_score: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          profile_id_1: string
+          profile_id_2: string
+          similarity_score: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          profile_id_1?: string
+          profile_id_2?: string
+          similarity_score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_similarities_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_similarities_profile_id_1_fkey"
+            columns: ["profile_id_1"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_similarities_profile_id_2_fkey"
+            columns: ["profile_id_2"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           about_you: string | null

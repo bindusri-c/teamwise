@@ -5,7 +5,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type Profile = {
   id: string;
@@ -24,103 +25,143 @@ interface ProfileSimilarityScoreProps {
 const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId, eventId }) => {
   const [similarProfiles, setSimilarProfiles] = useState<Profile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchSimilarProfiles = async () => {
-      if (!userId || !eventId) {
+  const fetchSimilarProfiles = async () => {
+    if (!userId || !eventId) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      // Check if the user has a profile with embedding
+      const { data: userProfile, error: userProfileError } = await supabase
+        .from('profiles')
+        .select('id, embedding')
+        .eq('id', userId)
+        .eq('event_id', eventId)
+        .single();
+
+      if (userProfileError) {
+        throw userProfileError;
+      }
+
+      if (!userProfile || !userProfile.embedding) {
+        setError("Your profile does not have embedding data yet. Please complete your profile.");
         setIsLoading(false);
         return;
       }
 
-      try {
-        // Get current user's profile
-        const { data: userProfile, error: userProfileError } = await supabase
-          .from('profiles')
-          .select('id, embedding')
-          .eq('id', userId)
+      // Get similar profiles using the precomputed similarity scores
+      // Need to fetch from profile_similarities and join with profiles table
+      const { data: similarityData, error: similarityError } = await supabase
+        .from('profile_similarities')
+        .select(`
+          similarity_score,
+          profiles!profile_similarities_profile_id_2_fkey (
+            id, name, image_url, skills, interests
+          )
+        `)
+        .eq('event_id', eventId)
+        .eq('profile_id_1', userId)
+        .order('similarity_score', { ascending: false });
+
+      // If no results with userId as profile_id_1, try with userId as profile_id_2
+      if ((!similarityData || similarityData.length === 0) && !similarityError) {
+        const { data: reversedData, error: reversedError } = await supabase
+          .from('profile_similarities')
+          .select(`
+            similarity_score,
+            profiles!profile_similarities_profile_id_1_fkey (
+              id, name, image_url, skills, interests
+            )
+          `)
           .eq('event_id', eventId)
-          .single();
-
-        if (userProfileError) {
-          throw userProfileError;
+          .eq('profile_id_2', userId)
+          .order('similarity_score', { ascending: false });
+          
+        if (reversedError) {
+          throw reversedError;
         }
-
-        if (!userProfile || !userProfile.embedding) {
-          setError("Your profile does not have embedding data yet. Please complete your profile.");
+        
+        if (reversedData && reversedData.length > 0) {
+          // Transform the data to match our expected format
+          const profiles = reversedData.map(item => ({
+            ...item.profiles,
+            similarity_score: item.similarity_score
+          }));
+          
+          setSimilarProfiles(profiles);
           setIsLoading(false);
           return;
         }
-
-        // Get all other profiles for this event
-        const { data: otherProfiles, error: otherProfilesError } = await supabase
-          .from('profiles')
-          .select('id, name, image_url, skills, interests, embedding')
-          .eq('event_id', eventId)
-          .neq('id', userId);
-
-        if (otherProfilesError) {
-          throw otherProfilesError;
-        }
-
-        // Calculate cosine similarity for each profile
-        const profilesWithScores = otherProfiles
-          .filter(profile => profile.embedding) // Only include profiles with embeddings
-          .map(profile => {
-            // Calculate cosine similarity
-            const similarity = calculateCosineSimilarity(
-              JSON.parse(userProfile.embedding),
-              JSON.parse(profile.embedding)
-            );
-
-            return {
-              ...profile,
-              similarity_score: similarity
-            };
-          })
-          .sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0))
-          .slice(0, 5); // Get top 5 most similar profiles
-
-        setSimilarProfiles(profilesWithScores);
-      } catch (error: any) {
-        console.error("Error fetching similar profiles:", error);
-        setError("Failed to load similarity scores. Try again later.");
-        toast({
-          title: "Error",
-          description: "Failed to load profile similarity data.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
       }
-    };
 
-    fetchSimilarProfiles();
-  }, [userId, eventId, toast]);
+      if (similarityError) {
+        throw similarityError;
+      }
 
-  // Calculate cosine similarity between two embedding vectors
-  const calculateCosineSimilarity = (vectorA: number[], vectorB: number[]): number => {
-    if (!vectorA || !vectorB || vectorA.length !== vectorB.length) {
-      return 0;
+      if (similarityData && similarityData.length > 0) {
+        // Transform the data to match our expected format
+        const profiles = similarityData.map(item => ({
+          ...item.profiles,
+          similarity_score: item.similarity_score
+        }));
+        
+        setSimilarProfiles(profiles);
+      } else {
+        // If no precomputed scores are found, trigger calculation
+        await calculateSimilarityScores();
+      }
+    } catch (error: any) {
+      console.error("Error fetching similar profiles:", error);
+      setError("Failed to load similarity scores. Try again later.");
+      toast({
+        title: "Error",
+        description: "Failed to load profile similarity data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < vectorA.length; i++) {
-      dotProduct += vectorA[i] * vectorB[i];
-      normA += vectorA[i] * vectorA[i];
-      normB += vectorB[i] * vectorB[i];
-    }
-
-    if (normA === 0 || normB === 0) {
-      return 0;
-    }
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   };
+
+  // Function to calculate similarity scores via edge function
+  const calculateSimilarityScores = async () => {
+    setIsRefreshing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('calculate-similarity', {
+        body: { eventId, profileId: userId }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Success",
+        description: "Similarity scores updated successfully.",
+      });
+
+      // After calculation, fetch the profiles again
+      await fetchSimilarProfiles();
+    } catch (error: any) {
+      console.error("Error calculating similarity scores:", error);
+      toast({
+        title: "Error",
+        description: "Failed to calculate similarity scores.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSimilarProfiles();
+  }, [userId, eventId]);
 
   const getInitials = (name: string) => {
     return name
@@ -142,8 +183,21 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
   if (error) {
     return (
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">Similar Participants</CardTitle>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={calculateSimilarityScores}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Refresh
+          </Button>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">{error}</p>
@@ -154,8 +208,21 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg">People You Might Connect With</CardTitle>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={calculateSimilarityScores}
+          disabled={isRefreshing || isLoading}
+        >
+          {isRefreshing ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Refresh
+        </Button>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -191,7 +258,10 @@ const ProfileSimilarityScore: React.FC<ProfileSimilarityScoreProps> = ({ userId,
             })}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No similar profiles found. More participants may appear as they join.</p>
+          <p className="text-sm text-muted-foreground">
+            No similar profiles found. More participants may appear as they join.
+            {isRefreshing ? " Refreshing similarity scores..." : ""}
+          </p>
         )}
       </CardContent>
     </Card>

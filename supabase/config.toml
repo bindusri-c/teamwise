@@ -47,3 +47,6 @@ verify_jwt = true
 
 [functions.hello-world]
 verify_jwt = true
+
+[functions.calculate-similarity]
+verify_jwt = true
