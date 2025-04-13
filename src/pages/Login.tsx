@@ -68,7 +68,8 @@ const Login = () => {
     }
 
     try {
-      const success = await signup(email, password, name);
+      // Fix: pass just email and password to signup
+      const success = await signup(email, password);
       if (success) {
         // On successful signup, show success message and switch to login tab
         setActiveTab('login');

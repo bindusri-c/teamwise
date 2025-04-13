@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -64,7 +63,6 @@ const EventForm = () => {
     }
   };
 
-  // Handle resume file upload
   const handleResumeChange = (file: File) => {
     setFormData((prev) => ({ ...prev, resume: file }));
     setResumeFileName(file.name);
@@ -74,7 +72,6 @@ const EventForm = () => {
     }
   };
 
-  // Handle additional files upload
   const handleAdditionalFilesChange = (files: File[]) => {
     setFormData((prev) => ({ 
       ...prev, 
@@ -83,7 +80,6 @@ const EventForm = () => {
     setAdditionalFileNames((prev) => [...prev, ...files.map(f => f.name)]);
   };
 
-  // Handle tag management
   const handleAddTag = (field: 'skills' | 'interests', tag: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -122,13 +118,12 @@ const EventForm = () => {
     setIsSubmitting(true);
     
     try {
-      // Create or update profile in database
       const profileData = {
         id: userId,
         event_id: eventId,
         name: formData.name,
         email: formData.email,
-        age: formData.age ? parseInt(formData.age) : null,
+        age: formData.age ? parseInt(String(formData.age)) : null,
         gender: formData.gender,
         hobbies: formData.hobbies,
         about_you: formData.aboutYou,
@@ -143,7 +138,6 @@ const EventForm = () => {
       
       if (error) throw error;
       
-      // Handle file uploads if present
       let resumeUrl = null;
       if (formData.resume) {
         const { data: resumeData, error: resumeError } = await supabase.storage
@@ -159,7 +153,6 @@ const EventForm = () => {
           
           resumeUrl = urlData.publicUrl;
           
-          // Update profile with resume URL
           await supabase
             .from('profiles')
             .update({ resume_url: resumeUrl })
@@ -168,7 +161,6 @@ const EventForm = () => {
         }
       }
       
-      // Handle additional files
       if (formData.additionalFiles.length > 0) {
         const fileUrls: string[] = [];
         
@@ -200,7 +192,6 @@ const EventForm = () => {
         }
       }
       
-      // Generate embedding
       await generateEmbedding(userId, eventId);
       
       toast({
