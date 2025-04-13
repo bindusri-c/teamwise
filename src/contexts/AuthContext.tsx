@@ -9,6 +9,8 @@ interface AuthContextType {
   session: Session | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isNewUser: boolean;
+  setIsNewUser: (value: boolean) => void;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -28,6 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isNewUser, setIsNewUser] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -113,6 +116,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
+      // Set isNewUser to true when a user signs up
+      setIsNewUser(true);
+
       toast({
         title: "Success",
         description: "Account created successfully! Please check your email to confirm your account.",
@@ -152,6 +158,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         isAuthenticated: !!user,
         isLoading,
+        isNewUser,
+        setIsNewUser,
         login,
         signup,
         logout

@@ -1,5 +1,5 @@
 
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -7,7 +7,8 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isNewUser, setIsNewUser } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -19,6 +20,12 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Redirect new users to the profile page if they're not already heading there
+  if (isNewUser && location.pathname !== '/profile') {
+    setIsNewUser(false); // Reset the flag after redirecting
+    return <Navigate to="/profile" replace />;
   }
 
   return <>{children}</>;
