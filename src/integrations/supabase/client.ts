@@ -300,7 +300,7 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
   try {
     console.log("[client] Starting profile embedding generation for user:", userId, "in event:", eventId);
     
-    // Check if the profile exists
+    // Check if the profile exists and create it if it doesn't
     let { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('*')
@@ -313,7 +313,6 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       throw profileError;
     }
     
-    // If profile doesn't exist, create a minimal one
     if (!profileData) {
       console.log("[client] Profile not found, attempting to create a minimal profile");
       
@@ -364,7 +363,7 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       
       console.log("[client] Successfully created minimal profile:", newProfile);
       
-      // Use the newly created profile by reassigning to let variable
+      // Use the newly created profile
       profileData = newProfile;
     }
     
@@ -396,22 +395,27 @@ export const generateProfileEmbedding = async (userId: string, eventId: string) 
       pineconeIndex: indexName
     });
     
-    const { data, error } = await supabase.functions.invoke('generate-embedding', {
-      body: { 
-        userId, 
-        eventId, 
-        profileData,
-        pineconeIndex: indexName // Explicitly pass the index name
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-embedding', {
+        body: { 
+          userId, 
+          eventId, 
+          profileData,
+          pineconeIndex: indexName // Explicitly pass the index name
+        }
+      });
+      
+      if (error) {
+        console.error("[client] Error invoking generate-embedding function:", error);
+        return { success: false, error: error };
       }
-    });
-    
-    if (error) {
-      console.error("[client] Error invoking generate-embedding function:", error);
-      throw error;
+      
+      console.log("[client] Embedding generation successful:", data);
+      return { success: true, data };
+    } catch (invocationError) {
+      console.error("[client] Exception during embedding function invocation:", invocationError);
+      return { success: false, error: invocationError };
     }
-    
-    console.log("[client] Embedding generation successful:", data);
-    return { success: true, data };
   } catch (error) {
     console.error("[client] Error generating profile embedding:", error);
     return { success: false, error };

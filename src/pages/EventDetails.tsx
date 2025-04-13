@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertCircle, RefreshCw } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import EventHeader from '@/components/event/EventHeader';
 import ParticipantsList from '@/components/event/ParticipantsList';
@@ -36,7 +36,9 @@ const EventDetails = () => {
   const [event, setEvent] = useState<Tables<'events'> | null>(null);
   const [profiles, setProfiles] = useState<ProfileWithSimilarity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
+  const [embeddingError, setEmbeddingError] = useState<string | null>(null);
 
   useEffect(() => {
     if (eventId) {
@@ -68,6 +70,8 @@ const EventDetails = () => {
     }
     
     setIsLoading(true);
+    setEmbeddingError(null);
+    
     try {
       console.log('Fetching event details for eventId:', eventId);
       
@@ -143,7 +147,6 @@ const EventDetails = () => {
         }
 
         // Check if the user has a profile for this event
-        // We're specifically NOT doing event_id filtering here to find ANY profile for the user
         console.log('Checking if user has a profile');
         const { data: existingProfile, error: profileCheckError } = await supabase
           .from('profiles')
@@ -185,14 +188,16 @@ const EventDetails = () => {
           try {
             const result = await generateProfileEmbedding(userId, eventId);
             if (!result.success) {
+              setEmbeddingError("There was an issue generating profile similarity data. Some features may be limited.");
               toast({
-                title: "Warning", 
-                description: "Could not generate profile similarity scores. Some features may be limited.",
+                title: "Service Limitations", 
+                description: "Profile similarity features may be limited. See details below.",
                 variant: "destructive",
               });
             }
           } catch (error: any) {
             console.error('Error generating embedding:', error);
+            setEmbeddingError("Profile similarity features are currently unavailable. Try refreshing later.");
             toast({
               title: "Warning",
               description: "Failed to update your profile data: " + (error?.message || "Unknown error"),
@@ -313,6 +318,11 @@ const EventDetails = () => {
         console.log('Generating embedding for existing profile');
         const embedResult = await generateProfileEmbedding(userId, eventId);
         console.log('Profile embedding generation result:', embedResult);
+        
+        if (!embedResult.success) {
+          setEmbeddingError("There was an issue generating your profile similarity data. Some features may be limited.");
+        }
+        
         return;
       }
       
@@ -344,6 +354,10 @@ const EventDetails = () => {
       console.log('Generating embedding for new profile');
       const embedResult = await generateProfileEmbedding(userId, eventId);
       console.log('Profile embedding generation result:', embedResult);
+      
+      if (!embedResult.success) {
+        setEmbeddingError("There was an issue generating your profile similarity data. Some features may be limited.");
+      }
       
       // Refresh profiles
       fetchProfiles();
@@ -412,6 +426,7 @@ const EventDetails = () => {
 
   // Function to manually refresh the event data and profiles
   const handleRefresh = async () => {
+    setIsRefreshing(true);
     toast({
       title: "Refreshing",
       description: "Refreshing event data and profiles...",
@@ -430,6 +445,50 @@ const EventDetails = () => {
         description: "Failed to refresh data. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Function to manually retrigger embedding generation
+  const handleRegenerateEmbedding = async () => {
+    if (!userId || !eventId) return;
+    
+    setIsRefreshing(true);
+    setEmbeddingError(null);
+    toast({
+      title: "Processing",
+      description: "Generating profile similarity data...",
+    });
+    
+    try {
+      const result = await generateProfileEmbedding(userId, eventId);
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Profile data processed successfully!",
+        });
+        // Refresh data to show any changes
+        await fetchProfiles();
+      } else {
+        setEmbeddingError("Failed to generate profile similarity data. The service might be temporarily unavailable.");
+        toast({
+          title: "Error", 
+          description: "Could not generate profile similarity data. Try again later.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error generating embedding:", error);
+      setEmbeddingError("Profile similarity service is currently unavailable. Please try again later.");
+      toast({
+        title: "Service Error",
+        description: "Could not connect to profile similarity service.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -475,12 +534,27 @@ const EventDetails = () => {
           Back to Dashboard
         </Button>
         
-        <Button 
-          variant="outline" 
-          onClick={handleRefresh}
-        >
-          Refresh Data
-        </Button>
+        <div className="flex space-x-2">
+          {embeddingError && (
+            <Button 
+              variant="outline" 
+              onClick={handleRegenerateEmbedding}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Retry Similarity
+            </Button>
+          )}
+          
+          <Button 
+            variant="outline" 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh Data
+          </Button>
+        </div>
       </div>
       
       <EventHeader 
@@ -488,6 +562,17 @@ const EventDetails = () => {
         isCreator={isCreator} 
         userHasProfile={true}
       />
+      
+      {embeddingError && (
+        <Card className="mb-6 border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500" />
+              <p className="text-sm text-amber-800 dark:text-amber-400">{embeddingError}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       
       {/* Pass eventId explicitly to ensure ParticipantsList has it */}
       <ParticipantsList profiles={profiles} eventId={eventId as string} />
