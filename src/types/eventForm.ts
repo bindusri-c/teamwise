@@ -2,8 +2,8 @@
 export interface EventFormData {
   name: string;
   email: string;
-  age: number | '';
-  gender: 'male' | 'female' | '';
+  age: string | number;
+  gender: '' | 'male' | 'female';
   hobbies: string;
   resume: File | null;
   additionalFiles: File[];
@@ -12,4 +12,5 @@ export interface EventFormData {
   image: File | null;
   skills: string[];
   interests: string[];
+  linkedinUrl: string;
 }

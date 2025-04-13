@@ -1,11 +1,49 @@
 
 project_id = "tagpzwzxruxxxoldiwtt"
 
-[functions."hello-world"]
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "auth"]
+
+[api.headers]
+Content-Security-Policy = "frame-ancestors 'none'"
+Referrer-Policy = "strict-origin-when-cross-origin"
+X-Content-Type-Options = "nosniff"
+X-Frame-Options = "DENY"
+X-XSS-Protection = "1; mode=block"
+
+[db]
+port = 54322
+
+[db.shadow]
+port = 54320
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+
+[analytics]
+enabled = false
+port = 54327
+
+[studio]
+enabled = true
+port = 54323
+
+[functions]
+port = 54328
+function_timeout = 30
+memory_limit = 256
+
+[functions.generate-embedding]
 verify_jwt = true
 
-[functions."generate-event-code"]
+[functions.generate-event-code]
 verify_jwt = true
 
-[functions."generate-embedding"]
+[functions.hello-world]
 verify_jwt = true

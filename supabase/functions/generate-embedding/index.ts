@@ -1,146 +1,174 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
+// Define interfaces
+interface Profile {
+  id: string;
+  name: string;
+  email: string;
+  age: number | null;
+  gender: string | null;
+  hobbies: string | null;
+  image_url: string;
+  resume_url: string;
+  additional_files: string[] | null;
+  about_you: string | null;
+  looking_for: string | null;
+  skills: string[] | null;
+  interests: string[] | null;
+  linkedin_url: string | null;
+  event_id: string;
+}
+
+interface RequestBody {
+  userId: string;
+  eventId: string;
+  profileData: Profile;
+}
+
+// Supabase client setup with explicit types
+const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
+const geminiApiKey = Deno.env.get('GEMINI_API_KEY') as string
+const geminiApiEndpoint = Deno.env.get('GEMINI_API_ENDPOINT') || 'https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent'
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+// CORS headers
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
-serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: corsHeaders,
-      status: 204,
-    });
+export const corsResponse = () => {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  })
+}
+
+// Function to create a text representation of the profile
+function createEmbeddingText(profile: Profile): string {
+  const parts = [
+    `Name: ${profile.name || ''}`,
+    `Email: ${profile.email || ''}`,
+    profile.age ? `Age: ${profile.age}` : '',
+    profile.gender ? `Gender: ${profile.gender}` : '',
+    profile.hobbies ? `Hobbies: ${profile.hobbies}` : '',
+    profile.about_you ? `About: ${profile.about_you}` : '',
+    profile.looking_for ? `Looking for: ${profile.looking_for}` : '',
+    profile.skills?.length ? `Skills: ${profile.skills.join(', ')}` : '',
+    profile.interests?.length ? `Interests: ${profile.interests.join(', ')}` : '',
+    profile.linkedin_url ? `LinkedIn: ${profile.linkedin_url}` : '',
+  ]
+
+  return parts.filter(Boolean).join(' ').trim()
+}
+
+// Function to generate embedding vector using Gemini API
+async function generateEmbedding(text: string): Promise<number[]> {
+  console.log(`Generating embedding for text of length: ${text.length}`)
+  
+  try {
+    // Truncate text if too long (Gemini has token limits)
+    const truncatedText = text.length > 2048 ? text.substring(0, 2048) : text
+    
+    const response = await fetch(
+      `${geminiApiEndpoint}?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'embedding-001',
+          content: { parts: [{ text: truncatedText }] },
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Error from Gemini API: ${response.status} ${errorText}`)
+      throw new Error(`Gemini API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    // Return the embedding values
+    if (data && data.embedding && data.embedding.values) {
+      console.log(`Successfully generated embedding with dimension: ${data.embedding.values.length}`)
+      return data.embedding.values
+    } else {
+      console.error('Unexpected response format from Gemini API:', JSON.stringify(data))
+      throw new Error('Invalid embedding response format from Gemini API')
+    }
+  } catch (error) {
+    console.error('Error generating embedding:', error)
+    throw error
+  }
+}
+
+// Main handler function
+Deno.serve(async (req) => {
+  // Handle CORS preflight request
+  if (req.method === 'OPTIONS') {
+    return corsResponse()
   }
 
   try {
-    // Create a Supabase client with the Auth context of the logged in user
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: {
-          headers: { Authorization: req.headers.get("Authorization")! },
-        },
-      }
-    );
+    // Parse the request body
+    const { userId, eventId, profileData } = await req.json() as RequestBody
 
-    // Get the current user's auth info
-    const {
-      data: { user },
-    } = await supabaseClient.auth.getUser();
-
-    if (!user) {
+    if (!userId || !eventId || !profileData) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: 'Missing required fields' }),
         {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 401,
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
-      );
+      )
     }
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not set");
+    console.log(`Processing profile embedding for user: ${userId}, event: ${eventId}`)
+
+    // Create text representation for embedding
+    const textForEmbedding = createEmbeddingText(profileData)
+    
+    // Generate embedding using Gemini API
+    const embedding = await generateEmbedding(textForEmbedding)
+    
+    // Store the embedding in the database
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ embedding: embedding })
+      .eq('id', userId)
+      .eq('event_id', eventId)
+
+    if (updateError) {
+      console.error('Error storing embedding:', updateError)
+      throw updateError
     }
 
-    // Get form data from request
-    const { formData, eventId } = await req.json();
-    
-    // Prepare text for embedding
-    const textToEmbed = [
-      formData.name,
-      formData.email,
-      formData.age?.toString() || "",
-      formData.gender || "",
-      formData.hobbies || "",
-      formData.aboutYou || "",
-      formData.lookingFor || "",
-      ...(formData.skills || []),
-      ...(formData.interests || [])
-    ].filter(Boolean).join(" ");
-    
-    if (!textToEmbed) {
-      throw new Error("No text to embed");
-    }
-    
-    // Call Gemini API to get embeddings
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent?key=" + GEMINI_API_KEY,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          content: {
-            parts: [{ text: textToEmbed }]
-          }
-        })
-      }
-    );
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", errorText);
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
-    
-    const embedData = await response.json();
-    const embedding = embedData.embedding?.values;
-    
-    if (!embedding) {
-      throw new Error("No embedding returned from Gemini API");
-    }
-    
-    console.log("Successfully generated embedding");
-    
-    // Store profile data with embedding
-    const { data: profileData, error: profileError } = await supabaseClient
-      .from("profiles")
-      .upsert({
-        id: user.id,
-        name: formData.name,
-        email: formData.email,
-        age: formData.age,
-        gender: formData.gender,
-        hobbies: formData.hobbies,
-        about_you: formData.aboutYou,
-        looking_for: formData.lookingFor,
-        skills: formData.skills,
-        interests: formData.interests,
-        embedding,
-        event_id: eventId,
-        linkedin_url: formData.linkedinUrl,
-        resume_url: formData.resumeUrl,
-        image_url: formData.imageUrl,
-        additional_files: formData.additionalFiles
-      })
-      .select();
-    
-    if (profileError) {
-      throw profileError;
-    }
+    console.log(`Successfully stored embedding for user: ${userId}, event: ${eventId}`)
 
+    // Return success response
     return new Response(
-      JSON.stringify({ success: true, profile: profileData }),
+      JSON.stringify({ success: true }),
       {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
-    );
+    )
   } catch (error) {
-    console.error("Error in generate-embedding function:", error);
+    console.error('Error in generate-embedding function:', error)
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || 'Unknown error' }),
       {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
-    );
+    )
   }
-});
+})
