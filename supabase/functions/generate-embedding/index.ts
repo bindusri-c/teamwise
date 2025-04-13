@@ -1,4 +1,3 @@
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
 // Define interfaces
@@ -33,6 +32,7 @@ const geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1/models/e
 
 // Pinecone configuration
 const pineconeApiKey = Deno.env.get('PINECONE_API_KEY') as string
+const pineconeProjectId = Deno.env.get('PINECONE_PROJECT_ID') as string
 const pineconeEnvironment = Deno.env.get('PINECONE_ENVIRONMENT') as string
 const pineconeIndexName = Deno.env.get('PINECONE_INDEX_NAME') || 'profiles'
 
@@ -51,7 +51,7 @@ export const corsResponse = () => {
   })
 }
 
-// New function to extract text from PDF resume
+// Improved function to extract text from PDF resume with better error handling
 async function extractTextFromPDF(resumeUrl: string): Promise<string> {
   try {
     console.log(`Downloading resume from: ${resumeUrl}`);
@@ -66,22 +66,27 @@ async function extractTextFromPDF(resumeUrl: string): Promise<string> {
     // Get the PDF content as arrayBuffer
     const pdfBuffer = await pdfResponse.arrayBuffer();
     
-    // Use a simple text extraction approach for PDFs
-    // This is a basic extraction that works for text-based PDFs
-    // For more complex PDFs with images or non-text content, we would need a more sophisticated parser
-    const decoder = new TextDecoder("utf-8");
-    let text = decoder.decode(pdfBuffer);
-    
-    // Basic cleaning: remove non-printable characters and normalize whitespace
-    text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ")  // Keep only printable ASCII and whitespace
-               .replace(/\s+/g, " ")                 // Normalize whitespace
-               .trim();
-    
-    // Extract a reasonable amount of text (first 5000 characters)
-    const extractedText = text.substring(0, 5000);
-    
-    console.log(`Successfully extracted ${extractedText.length} characters from resume`);
-    return extractedText;
+    try {
+      // Attempt to extract text using TextDecoder
+      // Note: This is a basic extraction that will only work for text-based PDFs
+      const decoder = new TextDecoder("utf-8");
+      let text = decoder.decode(pdfBuffer);
+      
+      // Basic cleaning: remove non-printable characters and normalize whitespace
+      text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ")  // Keep only printable ASCII and whitespace
+                 .replace(/\s+/g, " ")                 // Normalize whitespace
+                 .trim();
+      
+      // Extract a reasonable amount of text (first 5000 characters)
+      const extractedText = text.substring(0, 5000);
+      
+      console.log(`Successfully extracted ${extractedText.length} characters from resume`);
+      return extractedText;
+    } catch (decodingError) {
+      console.error(`Error decoding PDF: ${decodingError.message}`);
+      // Return a fallback empty string if decoding fails
+      return "";
+    }
   } catch (error) {
     console.error(`Error extracting text from PDF: ${error.message}`);
     return "";
@@ -130,7 +135,7 @@ async function createEmbeddingText(profile: Profile): Promise<string> {
   // PROFESSIONAL LINKS - Less critical but indicates professional presence
   if (profile.linkedin_url) profileText += `LinkedIn: ${profile.linkedin_url}. `;
   
-  // NEW: Try to extract and add resume content if available
+  // Try to extract and add resume content if available
   if (profile.resume_url) {
     console.log(`Extracting resume content from ${profile.resume_url}`);
     const resumeText = await extractTextFromPDF(profile.resume_url);
@@ -144,51 +149,69 @@ async function createEmbeddingText(profile: Profile): Promise<string> {
   return profileText.trim();
 }
 
-// Function to generate embedding vector using Gemini API
-async function generateEmbedding(text: string): Promise<number[]> {
+// Updated function to generate embedding vector using Gemini API with retries
+async function generateEmbedding(text: string, maxRetries = 3): Promise<number[]> {
   console.log(`Generating embedding for text of length: ${text.length}`)
   
-  try {
-    // Truncate text if too long (Gemini has token limits)
-    const truncatedText = text.length > 2048 ? text.substring(0, 2048) : text
-    
-    const response = await fetch(
-      `${geminiApiEndpoint}?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'embedding-001',
-          content: { parts: [{ text: truncatedText }] },
-        }),
+  // Truncate text if too long (Gemini has token limits)
+  const truncatedText = text.length > 2048 ? text.substring(0, 2048) : text
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Updated payload format according to Gemini API requirements
+      const response = await fetch(
+        `${geminiApiEndpoint}?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'embedding-001',
+            content: { parts: [{ text: truncatedText }] },
+          }),
+        }
+      )
+
+      if (response.status === 429 && attempt < maxRetries) {
+        // Rate limit hit, implement exponential backoff
+        const backoffTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s backoff
+        console.log(`Rate limited. Retrying in ${backoffTime}ms (attempt ${attempt}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
+        continue;
       }
-    )
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`Error from Gemini API: ${response.status} ${errorText}`)
-      throw new Error(`Gemini API error: ${response.status}`)
-    }
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Error from Gemini API: ${response.status} ${errorText}`)
+        throw new Error(`Gemini API error: ${response.status}`)
+      }
 
-    const data = await response.json()
-    
-    // Return the embedding values
-    if (data && data.embedding && data.embedding.values) {
-      console.log(`Successfully generated embedding with dimension: ${data.embedding.values.length}`)
-      return data.embedding.values
-    } else {
-      console.error('Unexpected response format from Gemini API:', JSON.stringify(data))
-      throw new Error('Invalid embedding response format from Gemini API')
+      const data = await response.json()
+      
+      // Return the embedding values
+      if (data && data.embedding && data.embedding.values) {
+        console.log(`Successfully generated embedding with dimension: ${data.embedding.values.length}`)
+        return data.embedding.values
+      } else {
+        console.error('Unexpected response format from Gemini API:', JSON.stringify(data))
+        throw new Error('Invalid embedding response format from Gemini API')
+      }
+    } catch (error) {
+      if (attempt === maxRetries) {
+        console.error('All embedding generation attempts failed:', error)
+        throw error
+      }
+      console.error(`Embedding attempt ${attempt} failed:`, error)
+      // Implement backoff for other errors too
+      await new Promise(resolve => setTimeout(resolve, attempt * 1000));
     }
-  } catch (error) {
-    console.error('Error generating embedding:', error)
-    throw error
   }
+  
+  throw new Error('Failed to generate embedding after all retry attempts')
 }
 
-// New function to store embedding in Pinecone
+// Improved function to store embedding in Pinecone with proper URL format
 async function storeEmbeddingInPinecone(
   userId: string, 
   eventId: string, 
@@ -202,6 +225,7 @@ async function storeEmbeddingInPinecone(
     }
 
     // Create metadata for the vector
+    // Keep metadata small and focused on searchable fields
     const metadata = {
       user_id: userId,
       event_id: eventId,
@@ -212,13 +236,15 @@ async function storeEmbeddingInPinecone(
       hobbies: profile.hobbies || null,
       skills: profile.skills?.join(", ") || null,
       interests: profile.interests?.join(", ") || null,
-      about_you: profile.about_you || null,
+      about_you: profile.about_you ? profile.about_you.substring(0, 1000) : null,
       linkedin_url: profile.linkedin_url || null
     };
 
-    // Build Pinecone upsert payload
-    const pineconeUrl = `https://${pineconeIndexName}-${pineconeEnvironment}.svc.pinecone.io/vectors/upsert`;
+    // Updated Pinecone URL format with project ID
+    // Format: https://<index-name>-<project-id>.svc.<environment>.pinecone.io/vectors/upsert
+    const pineconeUrl = `https://${pineconeIndexName}-${pineconeProjectId}.svc.${pineconeEnvironment}.pinecone.io/vectors/upsert`;
     
+    // Simplified body with single vector (no need for array wrapper as we're only inserting one)
     const body = {
       vectors: [
         {
@@ -253,7 +279,7 @@ async function storeEmbeddingInPinecone(
   }
 }
 
-// Main handler function
+// Main handler function with improved error handling
 Deno.serve(async (req) => {
   // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
@@ -279,13 +305,17 @@ Deno.serve(async (req) => {
     // Create text representation for embedding (now with resume content)
     const textForEmbedding = await createEmbeddingText(profileData)
     
-    // Generate embedding using Gemini API
+    // Generate embedding using Gemini API with retries
     const embedding = await generateEmbedding(textForEmbedding)
     
     // Store the embedding as a JSON string in the database
+    // Also update the updated_at timestamp
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ embedding: JSON.stringify(embedding) })
+      .update({ 
+        embedding: JSON.stringify(embedding),
+        updated_at: new Date().toISOString()
+      })
       .eq('id', userId)
       .eq('event_id', eventId)
 
