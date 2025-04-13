@@ -145,7 +145,7 @@ export const useProfileForm = (eventId?: string) => {
       const profileData = {
         name: formData.name,
         email: formData.email,
-        age: formData.age ? parseInt(formData.age) : null,
+        age: formData.age ? (typeof formData.age === 'string' ? parseInt(formData.age) : formData.age) : null,
         gender: formData.gender || null,
         hobbies: formData.hobbies || null,
         skills: formData.skills || [],
