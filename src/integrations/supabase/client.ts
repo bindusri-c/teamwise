@@ -49,6 +49,79 @@ export const createEvent = async (eventName: string, userId: string) => {
     } else {
       console.log("Pinecone index created:", indexData);
     }
+
+    // Automatically create an entry in the participants table
+    const { error: participantError } = await supabase
+      .from('participants')
+      .insert({
+        event_id: event.id,
+        user_id: userId
+      });
+    
+    if (participantError) {
+      console.error("Error adding user as participant:", participantError);
+    }
+
+    // Get or create a profile for this user in this event
+    const { data: existingProfile, error: profileCheckError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .eq('event_id', event.id)
+      .maybeSingle();
+    
+    if (profileCheckError) {
+      console.error("Error checking existing profile:", profileCheckError);
+    }
+
+    // If no profile exists yet, try to find profile from another event or create a minimal one
+    if (!existingProfile) {
+      // First try to get a profile from any other event
+      const { data: otherProfile, error: otherProfileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .limit(1)
+        .maybeSingle();
+      
+      if (otherProfileError) {
+        console.error("Error fetching profile from other events:", otherProfileError);
+      }
+
+      // Get user data
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error("Error fetching user data:", userError);
+      }
+
+      // Create a profile using existing data or minimal data if nothing exists
+      const newProfile = {
+        id: userId,
+        event_id: event.id,
+        email: userData?.user?.email || '',
+        name: otherProfile?.name || userData?.user?.email?.split('@')[0] || 'User',
+        // Copy other fields from the existing profile if available
+        age: otherProfile?.age || null,
+        gender: otherProfile?.gender || null,
+        hobbies: otherProfile?.hobbies || null,
+        skills: otherProfile?.skills || [],
+        interests: otherProfile?.interests || [],
+        about_you: otherProfile?.about_you || null,
+        linkedin_url: otherProfile?.linkedin_url || null
+      };
+
+      const { error: createProfileError } = await supabase
+        .from('profiles')
+        .insert(newProfile);
+      
+      if (createProfileError) {
+        console.error("Error creating profile:", createProfileError);
+      } else {
+        // Generate embedding for the new profile
+        await generateProfileEmbedding(userId, event.id);
+      }
+    }
     
     return { success: true, event };
   } catch (error) {
@@ -89,6 +162,67 @@ export const joinEvent = async (eventCode: string, userId: string) => {
         });
       
       if (joinError) throw joinError;
+    }
+
+    // Check if user already has a profile for this event
+    const { data: existingProfile, error: profileCheckError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .eq('event_id', eventData.id)
+      .maybeSingle();
+    
+    if (profileCheckError) {
+      console.error("Error checking existing profile:", profileCheckError);
+    }
+
+    // If no profile exists yet, try to find profile from another event or create a minimal one
+    if (!existingProfile) {
+      // First try to get a profile from any other event
+      const { data: otherProfile, error: otherProfileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .limit(1)
+        .maybeSingle();
+      
+      if (otherProfileError) {
+        console.error("Error fetching profile from other events:", otherProfileError);
+      }
+
+      // Get user data
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error("Error fetching user data:", userError);
+      }
+
+      // Create a profile using existing data or minimal data if nothing exists
+      const newProfile = {
+        id: userId,
+        event_id: eventData.id,
+        email: userData?.user?.email || '',
+        name: otherProfile?.name || userData?.user?.email?.split('@')[0] || 'User',
+        // Copy other fields from the existing profile if available
+        age: otherProfile?.age || null,
+        gender: otherProfile?.gender || null,
+        hobbies: otherProfile?.hobbies || null,
+        skills: otherProfile?.skills || [],
+        interests: otherProfile?.interests || [],
+        about_you: otherProfile?.about_you || null,
+        linkedin_url: otherProfile?.linkedin_url || null
+      };
+
+      const { error: createProfileError } = await supabase
+        .from('profiles')
+        .insert(newProfile);
+      
+      if (createProfileError) {
+        console.error("Error creating profile:", createProfileError);
+      } else {
+        // Generate embedding for the new profile
+        await generateProfileEmbedding(userId, eventData.id);
+      }
     }
     
     return { success: true, event: eventData };

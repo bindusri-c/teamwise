@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, ArrowLeft, Check } from 'lucide-react';
 import { useProfileForm } from '@/hooks/useProfileForm';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, generateProfileEmbedding } from '@/integrations/supabase/client';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import ResumeUpload from '@/components/profile/ResumeUpload';
 import AdditionalFilesUpload from '@/components/profile/AdditionalFilesUpload';
@@ -21,6 +21,7 @@ const EventForm = () => {
   const { userId } = useCurrentUser();
   const [isUpdating, setIsUpdating] = useState(false);
   const [hasProfile, setHasProfile] = useState(false);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
   
   const {
     event,
@@ -48,6 +49,7 @@ const EventForm = () => {
   }, [userId, eventId]);
 
   const checkForExistingProfile = async () => {
+    setIsCheckingProfile(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -57,10 +59,88 @@ const EventForm = () => {
         .maybeSingle();
 
       if (error) throw error;
-      setHasProfile(!!data);
-      setIsUpdating(!!data);
+      
+      if (data) {
+        setHasProfile(true);
+        setIsUpdating(true);
+        
+        if (!data.embedding) {
+          console.log("Profile found but no embedding, generating embedding...");
+          const { success, error: embeddingError } = await generateProfileEmbedding(userId, eventId);
+          
+          if (embeddingError) {
+            console.error("Error generating embedding:", embeddingError);
+          } else {
+            console.log("Embedding generated successfully");
+          }
+        }
+        
+        toast({
+          title: "Already Registered",
+          description: "You are already registered for this event. Redirecting to dashboard...",
+          variant: "default",
+        });
+        
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 1500);
+      } else {
+        console.log("No profile found, creating one and generating embedding...");
+        
+        const { success: enrollSuccess, error: enrollError } = await ensureUserEnrolled(userId, eventId);
+        
+        if (!enrollSuccess) {
+          console.error("Error enrolling user:", enrollError);
+        }
+        
+        const { data: userData } = await supabase.auth.getUser();
+        
+        const { data: otherProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .neq('event_id', eventId)
+          .limit(1)
+          .maybeSingle();
+        
+        if (otherProfile) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: userId,
+              event_id: eventId,
+              name: otherProfile.name,
+              email: otherProfile.email || userData?.user?.email,
+              age: otherProfile.age,
+              gender: otherProfile.gender,
+              hobbies: otherProfile.hobbies,
+              about_you: otherProfile.about_you,
+              skills: otherProfile.skills,
+              interests: otherProfile.interests,
+              linkedin_url: otherProfile.linkedin_url
+            });
+          
+          if (profileError) {
+            console.error("Error creating profile from existing profile:", profileError);
+          } else {
+            await generateProfileEmbedding(userId, eventId);
+            
+            toast({
+              title: "Profile Created",
+              description: "Your profile has been created from existing data. Redirecting to dashboard...",
+              variant: "default",
+            });
+            
+            setTimeout(() => {
+              navigate('/dashboard');
+            }, 1500);
+          }
+        }
+      }
     } catch (error) {
       console.error('Error checking for existing profile:', error);
+    } finally {
+      setIsCheckingProfile(false);
     }
   };
 
@@ -209,7 +289,7 @@ const EventForm = () => {
       if (profileError) throw profileError;
       
       const { success: embeddingSuccess, error: embeddingError } = 
-        await generateEmbedding(userId, eventId, updatedProfileData);
+        await generateProfileEmbedding(userId, eventId);
       
       if (!embeddingSuccess) {
         console.error("Error generating profile embedding:", embeddingError);
@@ -231,6 +311,10 @@ const EventForm = () => {
       setHasProfile(true);
       setIsUpdating(true);
       
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
+      
     } catch (error: any) {
       console.error('Error saving profile:', error);
       toast({
@@ -242,6 +326,20 @@ const EventForm = () => {
       setIsSubmitting(false);
     }
   };
+
+  if (isCheckingProfile) {
+    return (
+      <div className="container py-8 mx-auto text-center">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Checking profile status...</AlertTitle>
+          <AlertDescription>
+            Please wait while we check your registration status.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (!eventId || !event) {
     return (

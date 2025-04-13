@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from 'react';
-import { supabase, generateProfileEmbedding } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -31,7 +31,6 @@ const EventsList = () => {
   const [profiles, setProfiles] = useState<Record<string, Profile[]>>({});
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRegenerating, setIsRegenerating] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
   const navigate = useNavigate();
   const { userId } = useCurrentUser();
@@ -162,49 +161,6 @@ const EventsList = () => {
     return `evt-${event.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 20)}`;
   };
 
-  // New function to regenerate embeddings directly
-  const regenerateEmbedding = async (eventId: string) => {
-    if (!userId) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to update your profile embedding",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Set the specific event as regenerating
-    setIsRegenerating(prev => ({ ...prev, [eventId]: true }));
-    
-    try {
-      const result = await generateProfileEmbedding(userId, eventId);
-      
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: "Your profile embedding has been updated successfully",
-          variant: "default",
-        });
-      } else {
-        console.error("Error regenerating profile embedding:", result.error);
-        toast({
-          title: "Error",
-          description: "Failed to update your profile embedding. Please try again.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Unexpected error regenerating profile embedding:", error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRegenerating(prev => ({ ...prev, [eventId]: false }));
-    }
-  };
-
   if (isLoading) {
     return <div className="flex justify-center p-4">Loading events...</div>;
   }
@@ -243,15 +199,7 @@ const EventsList = () => {
             </CardContent>
             <CardFooter className="flex justify-between flex-wrap gap-2">
               <div className="flex gap-2">
-                {profiles[event.id]?.some(p => p.id === userId) ? (
-                  <Button 
-                    variant="outline" 
-                    onClick={() => regenerateEmbedding(event.id)}
-                    disabled={isRegenerating[event.id]}
-                  >
-                    {isRegenerating[event.id] ? "Updating..." : "Update Profile"}
-                  </Button>
-                ) : (
+                {!profiles[event.id]?.some(p => p.id === userId) && (
                   <Button 
                     variant="outline" 
                     onClick={() => viewEventForm(event.id)}
