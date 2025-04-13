@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Linkedin, User, Percent, BadgePercent } from 'lucide-react';
+import { Linkedin, User, BadgePercent } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 type ParticipantCardProps = {
@@ -62,7 +62,7 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
             </div>
           </div>
           
-          {/* Always show similarity badge with consistent formatting */}
+          {/* Display similarity badge with consistent formatting */}
           <Badge className={`${getSimilarityBadgeStyle(similarityScore)} flex items-center`}>
             <BadgePercent className="h-3 w-3 mr-1" />
             {formatSimilarityPercentage(similarityScore)}
@@ -127,18 +127,13 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
       </CardContent>
       
       <CardFooter className="bg-muted/30 justify-between">
-        {/* Always show match percentage, using 0% as default when no score is found */}
-        <Badge variant="outline" className="flex items-center gap-1">
-          <Percent className="h-3 w-3" />
-          Match: {formatSimilarityPercentage(similarityScore)}
-        </Badge>
-        
+        {/* Remove the duplicate similarity badge here, keep only LinkedIn connection button */}
         {profile.linkedin_url ? (
           <a 
             href={profile.linkedin_url} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="inline-flex items-center"
+            className="inline-flex items-center ml-auto"
           >
             <Button size="sm" variant="outline" className="gap-1">
               <Linkedin className="h-4 w-4" />
@@ -146,10 +141,12 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({ profile }) => {
             </Button>
           </a>
         ) : (
-          <Button size="sm" variant="outline" className="gap-1" disabled>
-            <User className="h-4 w-4" />
-            No LinkedIn
-          </Button>
+          <span className="ml-auto">
+            <Button size="sm" variant="outline" className="gap-1" disabled>
+              <User className="h-4 w-4" />
+              No LinkedIn
+            </Button>
+          </span>
         )}
       </CardFooter>
     </Card>
