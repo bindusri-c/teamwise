@@ -417,12 +417,14 @@ const EventForm = () => {
       console.log("Additional files uploaded successfully:", additionalFilesUrls);
       
       // Create profile data with uploaded file URLs
+      const ageValue = formData.age ? (typeof formData.age === 'string' ? parseInt(formData.age) : formData.age) : null;
+      
       const profileData = {
         id: userId,
         event_id: eventId,
         name: formData.name,
         email: formData.email,
-        age: formData.age ? parseInt(formData.age) : null,
+        age: ageValue,
         gender: formData.gender || null,
         hobbies: formData.hobbies || null,
         image_url: imageUrl,
